@@ -26,6 +26,8 @@ jobs:
       - run: npm install --prefix .pio/sql-test @electric-sql/pglite@0.5.12 --no-audit --no-fund
       - run: node tools/test-recipients-sql.mjs
       - run: node tools/test-camera-setup-sql.mjs
+      - run: node tools/test-migration-safety.mjs
+      - run: node tools/test-backup-encryption.mjs
   browser:
     runs-on: ubuntu-latest
     env:
