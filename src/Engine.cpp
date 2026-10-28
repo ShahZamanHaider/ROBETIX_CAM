@@ -21,12 +21,12 @@ static Recording recorder;static bool starting=false,cardOwned=false;static came
 static uint32_t nextMotionAt=0,nextAutoAt=0,motionEvent=0;static uint8_t recordOrigin=0;static bool bootOptions=true;
 static uint32_t nextRecordAt=0;
 static bool idleLow=false;static camera_status_t viewingSettings;
-static const char*optionKeys[]={"name","clip_seconds","reserve_mb","cleanup","recording_quality","recording_fps","preview_fps","motion","motion_photo","motion_record","sensitivity","motion_seconds","min_motion_seconds","cooldown_seconds","quality_mode","recording_mode","zone_x","zone_y","zone_w","zone_h","retain_videos","retain_photos","video_days","photo_days","schedule","schedule_start","schedule_end","schedule_days","timezone_minutes","timelapse_seconds","motion_interval","motion_threshold","motion_cells","motion_neighbors"};
+static const char*optionKeys[]={"name","clip_seconds","reserve_mb","cleanup","recording_quality","recording_fps","preview_fps","motion","motion_photo","motion_record","sensitivity","motion_seconds","min_motion_seconds","cooldown_seconds","quality_mode","recording_mode","zone_x","zone_y","zone_w","zone_h","retain_videos","retain_photos","video_days","photo_days","schedule","schedule_start","schedule_end","schedule_days","timezone_minutes","timelapse_seconds","motion_interval","motion_threshold","motion_cells","motion_neighbors","smaller_movements"};
 static AppOptions mergeOptions(const AppOptions&old,const AppOptions&v,uint64_t mask){AppOptions out=old;
  if(mask&1)strlcpy(out.name,v.name,sizeof(out.name));
  #define MERGE(bit,field) if(mask&(1ULL<<bit))out.field=v.field;
  MERGE(1,clipSeconds) MERGE(2,reserveMB) MERGE(3,cleanup) MERGE(4,recordingQuality) MERGE(5,recordingFps) MERGE(6,previewFps) MERGE(7,motion) MERGE(8,motionPhoto) MERGE(9,motionRecord) MERGE(10,sensitivity) MERGE(11,motionSeconds) MERGE(12,minMotionSeconds) MERGE(13,cooldownSeconds) MERGE(14,qualityMode) MERGE(15,recordingMode) MERGE(16,zoneX) MERGE(17,zoneY) MERGE(18,zoneW) MERGE(19,zoneH) MERGE(20,retainVideos) MERGE(21,retainPhotos) MERGE(22,videoDays) MERGE(23,photoDays)
- MERGE(24,schedule) MERGE(25,scheduleStart) MERGE(26,scheduleEnd) MERGE(27,scheduleDays) MERGE(28,timezoneMinutes) MERGE(29,timelapseSeconds) MERGE(30,motionInterval) MERGE(31,motionThreshold) MERGE(32,motionCells) MERGE(33,motionNeighbors)
+ MERGE(24,schedule) MERGE(25,scheduleStart) MERGE(26,scheduleEnd) MERGE(27,scheduleDays) MERGE(28,timezoneMinutes) MERGE(29,timelapseSeconds) MERGE(30,motionInterval) MERGE(31,motionThreshold) MERGE(32,motionCells) MERGE(33,motionNeighbors) MERGE(34,smallerMovements)
  #undef MERGE
  return out;
 }
@@ -40,7 +40,7 @@ static void encodeOptions(JsonObject o,const AppOptions&v){
  o["name"]=v.name;o["clip_seconds"]=v.clipSeconds;o["reserve_mb"]=v.reserveMB;o["cleanup"]=v.cleanup;o["recording_quality"]=v.recordingQuality;o["recording_fps"]=v.recordingFps;o["preview_fps"]=v.previewFps;o["privacy"]=v.privacy;
  o["motion"]=v.motion;o["motion_photo"]=v.motionPhoto;o["motion_record"]=v.motionRecord;o["sensitivity"]=v.sensitivity;o["motion_seconds"]=v.motionSeconds;o["min_motion_seconds"]=v.minMotionSeconds;o["cooldown_seconds"]=v.cooldownSeconds;
  o["quality_mode"]=v.qualityMode;o["recording_mode"]=v.recordingMode;o["zone_x"]=v.zoneX;o["zone_y"]=v.zoneY;o["zone_w"]=v.zoneW;o["zone_h"]=v.zoneH;o["retain_videos"]=v.retainVideos;o["retain_photos"]=v.retainPhotos;o["video_days"]=v.videoDays;o["photo_days"]=v.photoDays;
- o["motion_interval"]=v.motionInterval;o["motion_threshold"]=v.motionThreshold;o["motion_cells"]=v.motionCells;o["motion_neighbors"]=v.motionNeighbors;
+ o["motion_v2"]=true;o["smaller_movements"]=v.smallerMovements;o["motion_interval"]=v.motionInterval;o["motion_threshold"]=v.motionThreshold;o["motion_cells"]=v.motionCells;o["motion_neighbors"]=v.motionNeighbors;
  o["schedule"]=v.schedule;o["schedule_start"]=v.scheduleStart;o["schedule_end"]=v.scheduleEnd;o["schedule_days"]=v.scheduleDays;o["timezone_minutes"]=v.timezoneMinutes;o["timelapse_seconds"]=v.timelapseSeconds;
 }
 String cameraName(){xSemaphoreTake(stateMutex,portMAX_DELAY);String name=opts.name;xSemaphoreGive(stateMutex);return name;}
@@ -52,8 +52,8 @@ bool configure(JsonObject o,String&err){
  #define BOOL_FIELD(key,field) if(o.containsKey(key)){if(!o[key].is<bool>()){err="Invalid " key;return false;}v.field=o[key].as<bool>();}
  INT_FIELD("clip_seconds",clipSeconds,5,300) INT_FIELD("reserve_mb",reserveMB,16,1024) INT_FIELD("recording_quality",recordingQuality,0,2) INT_FIELD("recording_fps",recordingFps,1,10) INT_FIELD("preview_fps",previewFps,1,10)
  INT_FIELD("motion_interval",motionInterval,250,2000) INT_FIELD("motion_threshold",motionThreshold,6,40) INT_FIELD("motion_cells",motionCells,3,32) INT_FIELD("motion_neighbors",motionNeighbors,1,4)
- INT_FIELD("sensitivity",sensitivity,0,3) INT_FIELD("motion_seconds",motionSeconds,5,60) INT_FIELD("min_motion_seconds",minMotionSeconds,1,5) INT_FIELD("cooldown_seconds",cooldownSeconds,5,600)
- BOOL_FIELD("cleanup",cleanup) BOOL_FIELD("motion",motion) BOOL_FIELD("motion_photo",motionPhoto) BOOL_FIELD("motion_record",motionRecord)
+ INT_FIELD("sensitivity",sensitivity,0,3) INT_FIELD("motion_seconds",motionSeconds,5,60) INT_FIELD("min_motion_seconds",minMotionSeconds,1,5) INT_FIELD("cooldown_seconds",cooldownSeconds,1,600)
+ BOOL_FIELD("smaller_movements",smallerMovements) BOOL_FIELD("cleanup",cleanup) BOOL_FIELD("motion",motion) BOOL_FIELD("motion_photo",motionPhoto) BOOL_FIELD("motion_record",motionRecord)
  INT_FIELD("quality_mode",qualityMode,0,3) INT_FIELD("recording_mode",recordingMode,0,2)
  INT_FIELD("zone_x",zoneX,0,900) INT_FIELD("zone_y",zoneY,0,900) INT_FIELD("zone_w",zoneW,100,1000) INT_FIELD("zone_h",zoneH,100,1000)
  INT_FIELD("video_days",videoDays,1,3650) INT_FIELD("photo_days",photoDays,1,3650) BOOL_FIELD("retain_videos",retainVideos) BOOL_FIELD("retain_photos",retainPhotos)
@@ -134,10 +134,10 @@ static void task(void*){
    else if(c.action==Action::Restart){stopRecording();say("Restarting camera");delay(500);ESP.restart();}
   }
   uint32_t previewDeadline=previewUntil.load();bool view=previewDeadline&&(int32_t)(previewDeadline-millis())>0;if(previewDeadline&&!view)previewUntil.compare_exchange_strong(previewDeadline,0);
-  bool scheduleOpen=!opts.schedule||recordingWindow(epoch(),opts.timezoneMinutes,opts.scheduleStart,opts.scheduleEnd,opts.scheduleDays);
+  bool testingMotion=Motion::testing();bool scheduleOpen=!opts.schedule||recordingWindow(epoch(),opts.timezoneMinutes,opts.scheduleStart,opts.scheduleEnd,opts.scheduleDays);
   if(recording&&recordOrigin&& !scheduleOpen)stopRecording();
-  if(!recording&&!privacy&&!Camera::busy()&&scheduleOpen&&(int32_t)(millis()-nextAutoAt)>=0&&(opts.recordingMode==1||(opts.recordingMode==2&&Motion::active(opts.motionSeconds*1000UL)))){nextAutoAt=millis()+30000;startRecording(opts.recordingMode);}
-  bool testingMotion=Motion::testing();bool monitor=Motion::available()&&(opts.motion||opts.recordingMode==2||testingMotion);
+  if(!recording&&!privacy&&!Camera::busy()&&scheduleOpen&&(int32_t)(millis()-nextAutoAt)>=0&&(opts.recordingMode==1||(opts.recordingMode==2&&!testingMotion&&Motion::active(opts.motionSeconds*1000UL)))){nextAutoAt=millis()+30000;startRecording(opts.recordingMode);}
+  bool monitor=Motion::available()&&(opts.motion||opts.recordingMode==2||testingMotion);
   if(!recording&&!privacy&&!Camera::busy()&&Camera::ready){
    if(idleLow&&(view||!monitor)){xSemaphoreTake(Camera::mutex,portMAX_DELAY);restoreIdle();xSemaphoreGive(Camera::mutex);}
    else if(monitor&&!view&&!idleLow){xSemaphoreTake(Camera::mutex,portMAX_DELAY);viewingSettings=esp_camera_sensor_get()->status;auto&s=viewingSettings;idleLow=Camera::configure(FRAMESIZE_QVGA,24,s.brightness,s.contrast,s.saturation,s.hmirror,s.vflip,false);xSemaphoreGive(Camera::mutex);clearFrame();Motion::rebase();}
@@ -155,7 +155,7 @@ static void task(void*){
   if(recording&&!writeFailed&&recordDue){nextRecordAt=millis()+(opts.timelapseSeconds?opts.timelapseSeconds*1000UL:1000/opts.recordingFps);writeFailed=!recorder.append(f);xSemaphoreTake(stateMutex,portMAX_DELAY);recordFrames=recorder.frames;sdWriteUs=recorder.writeUs;strlcpy(lastFile,recorder.name.c_str(),sizeof(lastFile));xSemaphoreGive(stateMutex);}
   if(photoPending){photoPending=false;bool own=cardOwned||(Storage::available&&xSemaphoreTake(Storage::operationMutex,0)==pdTRUE);String name;bool ok=own&&Storage::reserve(f->len,opts.reserveMB,false)&&Storage::save(f,name,epoch());if(own&&!cardOwned)xSemaphoreGive(Storage::operationMutex);say(ok?"Photo saved":"Photo could not be saved. Check card space or downloads.");}
   bool movement=false;
-  if(motionDue){nextMotionAt=millis()+opts.motionInterval;if(!recording||recorder.writeUs<50000)movement=Motion::analyze(f,opts);if(!opts.motion&&opts.recordingMode!=2)movement=false;}
+  if(motionDue){nextMotionAt=millis()+opts.motionInterval;if(!recording||recorder.writeUs<50000)movement=Motion::analyze(f,opts);if(testingMotion||(!opts.motion&&opts.recordingMode!=2))movement=false;}
   if(movement){
    String photo;bool own=cardOwned||(Storage::available&&xSemaphoreTake(Storage::operationMutex,0)==pdTRUE);
    bool saved=false;if(own&&opts.motionPhoto)saved=Storage::reserve(f->len,opts.reserveMB,false)&&Storage::save(f,photo,epoch());
@@ -172,7 +172,7 @@ static void task(void*){
 bool begin(){
  stateMutex=xSemaphoreCreateMutex();frameMutex=xSemaphoreCreateMutex();commands=xQueueCreate(4,sizeof(Command));if(!stateMutex||!frameMutex||!commands)return false;
  Light::begin();Motion::begin();Events::begin();Maintenance::begin();Cloud::begin();
- String saved=prefs.getString("appOptions","");if(saved.length()){StaticJsonDocument<2048>d;if(!deserializeJson(d,saved)){opts.privacy=d["privacy"]|false;privacy=opts.privacy;String err;configure(d.as<JsonObject>(),err);}}else{Command c;c.action=Action::Options;c.options=opts;submit(c);}
+ String saved=prefs.getString("appOptions","");if(saved.length()){StaticJsonDocument<2048>d;if(!deserializeJson(d,saved)){if(!d["motion_v2"].as<bool>()){d["cooldown_seconds"]=2;d["min_motion_seconds"]=1;}opts.privacy=d["privacy"]|false;privacy=opts.privacy;String err;configure(d.as<JsonObject>(),err);}}else{Command c;c.action=Action::Options;c.options=opts;submit(c);}
  if(privacy){xSemaphoreTake(Camera::mutex,portMAX_DELAY);Camera::pause(true);xSemaphoreGive(Camera::mutex);}
  capacity=psramFound()?192*1024:32*1024;frameBuffer=(uint8_t*)heap_caps_malloc(capacity,psramFound()?MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT:MALLOC_CAP_8BIT);
  if(!frameBuffer){capacity=0;say("Preview buffer unavailable");}
