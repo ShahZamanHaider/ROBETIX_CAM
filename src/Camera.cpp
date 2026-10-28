@@ -4,13 +4,15 @@
 namespace Camera {
 SemaphoreHandle_t mutex;
 std::atomic<bool> ready{false}; uint16_t pid=0; String error;
-uint32_t captured=0,failures=0,captureUs=0;
+uint32_t captured=0,failures=0,captureUs=0;static uint32_t rateAt=0,rateFrames=0,lastCaptureAt=0;static float captureRate=0;
 static std::atomic<bool> benchmarking{false};
 static portMUX_TYPE benchMux=portMUX_INITIALIZER_UNLOCKED;
 struct Result { int size,quality; uint32_t frames,failed,ms,bytes,heap,psram; };
 static Result results[12]; static int resultCount=0;
 bool busy(){return benchmarking.load();}
-static bool validSize(int n) { return n==FRAMESIZE_QVGA || n==FRAMESIZE_VGA || n==FRAMESIZE_SVGA || n==FRAMESIZE_XGA || n==FRAMESIZE_SXGA || n==FRAMESIZE_UXGA; }
+static const camera_sensor_info_t*info=nullptr;
+static bool nativeSensor(sensor_t*s){if(!s)return false;info=esp_camera_sensor_get_info(&s->id);pid=s->id.PID;return info&&info->support_jpeg&&(pid==OV2640_PID||pid==OV3660_PID||pid==OV5640_PID);}
+static bool validSize(int n) { return (!info||n<=info->max_size)&&(n==FRAMESIZE_QVGA || n==FRAMESIZE_VGA || n==FRAMESIZE_SVGA || n==FRAMESIZE_XGA || n==FRAMESIZE_SXGA || n==FRAMESIZE_UXGA); }
 bool configure(int size,int quality,int brightness,int contrast,int saturation,int mirror,int flip,bool persist) {
   if(!ready || !validSize(size) || (!psramFound() && size!=FRAMESIZE_QVGA) || quality<10 || quality>40 || abs(brightness)>2 || abs(contrast)>2 || abs(saturation)>2 || mirror<0 || mirror>1 || flip<0 || flip>1) return false;
   sensor_t *s=esp_camera_sensor_get();
@@ -22,7 +24,7 @@ bool configure(int size,int quality,int brightness,int contrast,int saturation,i
     esp_err_t e=esp_camera_init(&c);
     if(e!=ESP_OK) { error="Camera reinit failed; reboot for safe VGA defaults"; return false; }
     s=esp_camera_sensor_get();
-    if(!s || s->id.PID!=OV2640_PID) { esp_camera_deinit(); error="OV2640 identity check failed"; return false; }
+    if(!s || !nativeSensor(s)) { esp_camera_deinit(); error="This camera module is not supported for native JPEG"; return false; }
     config=c; ready=true;
   }
   int rc=s->set_quality(s,quality) | s->set_brightness(s,brightness) | s->set_contrast(s,contrast) | s->set_saturation(s,saturation) | s->set_hmirror(s,mirror) | s->set_vflip(s,flip);
@@ -38,7 +40,8 @@ camera_config_t config={};
 static bool suspended=false;
 bool extras(int wb,int exposure,int gain,bool persist){
  if(!ready||wb<0||wb>4||exposure< -1||exposure>1200||gain< -1||gain>30)return false;
- auto s=esp_camera_sensor_get();if(!s||!s->set_wb_mode||!s->set_exposure_ctrl||!s->set_gain_ctrl)return false;
+ auto s=esp_camera_sensor_get();if(pid!=OV2640_PID&&pid!=OV3660_PID&&pid!=OV5640_PID)return false;
+ if(!s||!s->set_wb_mode||!s->set_exposure_ctrl||!s->set_gain_ctrl)return false;
  int rc=s->set_whitebal(s,1)|s->set_awb_gain(s,1)|s->set_wb_mode(s,wb)|s->set_exposure_ctrl(s,exposure<0)|s->set_gain_ctrl(s,gain<0);
  if(exposure>=0)rc|=s->set_aec_value(s,exposure);if(gain>=0)rc|=s->set_agc_gain(s,gain);
  if(!rc&&persist){prefs.putInt("wb",wb);prefs.putInt("exposure",exposure);prefs.putInt("gain",gain);}return rc==0;
@@ -47,7 +50,7 @@ bool pause(bool enabled){
  if(enabled){if(ready){esp_camera_deinit();ready=false;}pinMode(32,OUTPUT);digitalWrite(32,HIGH);suspended=true;return true;}
  if(!suspended&&ready)return true;
  esp_err_t e=esp_camera_init(&config);auto s=esp_camera_sensor_get();
- if(e!=ESP_OK||!s||s->id.PID!=OV2640_PID){error="Camera restart failed: "+String(esp_err_to_name(e))+". Check ribbon, sensor and power.";ready=false;return false;}
+ if(e!=ESP_OK||!s||!nativeSensor(s)){error="Camera restart failed: "+String(esp_err_to_name(e))+". Check ribbon, sensor and power.";ready=false;return false;}
  ready=true;suspended=false;error="";configure(config.frame_size,prefs.getInt("quality",18),prefs.getInt("bright",0),prefs.getInt("contrast",0),prefs.getInt("sat",0),prefs.getInt("mirror",0),prefs.getInt("flip",0),false);extras(prefs.getInt("wb",0),prefs.getInt("exposure",-1),prefs.getInt("gain",-1),false);return true;
 }
 bool begin() {
@@ -66,12 +69,13 @@ bool begin() {
   if(e!=ESP_OK){Serial.printf("Camera init error: %s (0x%x). Retrying native JPEG at QVGA.\n",esp_err_to_name(e),e);esp_camera_deinit();config.frame_size=FRAMESIZE_QVGA;config.jpeg_quality=20;delay(100);e=esp_camera_init(&config);}
   sensor_t *s=esp_camera_sensor_get();
   if(s) { pid=s->id.PID; Serial.printf("Sensor PID=0x%04x VER=0x%02x MID=%02x:%02x\n",pid,s->id.VER,s->id.MIDH,s->id.MIDL); }
-  if(e!=ESP_OK) { error="Native JPEG init failed (0x"+String(e,HEX)+"). Check serial sensor probe, ribbon and OV2640 module."; return false; }
-  if(!s || pid!=OV2640_PID) { esp_camera_deinit(); error="Sensor is not OV2640; capture refused"; return false; }
+  if(e==ESP_ERR_NOT_SUPPORTED){camera_config_t probe=config;probe.pixel_format=PIXFORMAT_RGB565;probe.frame_size=FRAMESIZE_QQVGA;esp_camera_deinit();if(esp_camera_init(&probe)==ESP_OK){auto detected=esp_camera_sensor_get();nativeSensor(detected);esp_camera_deinit();error="This camera module is not supported for native JPEG. Software conversion is not enabled.";return false;}}
+  if(e!=ESP_OK) { error="Native JPEG init failed (0x"+String(e,HEX)+"). Check sensor probe, ribbon, native-JPEG support and power."; return false; }
+  if(!s || !nativeSensor(s)) { esp_camera_deinit(); error="This camera module is not supported for native JPEG"; return false; }
   ready=true;
   configure(config.frame_size,prefs.getInt("quality",16),prefs.getInt("bright",0),prefs.getInt("contrast",0),prefs.getInt("sat",0),prefs.getInt("mirror",0),prefs.getInt("flip",0),false);
   extras(prefs.getInt("wb",0),prefs.getInt("exposure",-1),prefs.getInt("gain",-1),false);
-  Serial.printf("Verified OV2640; native JPEG; PSRAM %u bytes\n",ESP.getPsramSize()); return true;
+  Serial.printf("Detected %s; native JPEG; PSRAM %u bytes\n",info?info->name:"unknown",ESP.getPsramSize()); return true;
 }
 camera_fb_t* capture() {
   if(!ready) return nullptr;
@@ -79,11 +83,11 @@ camera_fb_t* capture() {
   if(!fb || fb->format!=PIXFORMAT_JPEG || fb->len<4 || fb->buf[0]!=0xff || fb->buf[1]!=0xd8 || fb->buf[fb->len-2]!=0xff || fb->buf[fb->len-1]!=0xd9) {
     if(fb) esp_camera_fb_return(fb); failures++; return nullptr;
   }
-  captured++; return fb;
+  uint32_t now=millis();if(!lastCaptureAt||now-lastCaptureAt>2000){rateAt=now;rateFrames=0;captureRate=0;}lastCaptureAt=now;captured++;rateFrames++;if(now-rateAt>=1000){captureRate=rateFrames*1000.0/(now-rateAt);rateAt=now;rateFrames=0;}return fb;
 }
 void status(JsonObject o) {
-  o["ready"]=ready.load(); o["pid"]=pid; o["error"]=error; o["format"]="native JPEG";
-  o["captured"]=captured; o["failures"]=failures; o["capture_ms"]=captureUs/1000.0;
+  o["ready"]=ready.load(); o["pid"]=pid; o["error"]=error; o["format"]="native JPEG";o["model"]=info?info->name:"Unknown";o["native_jpeg"]=info&&info->support_jpeg;o["max_size"]=info?int(info->max_size):0;auto sizes=o.createNestedArray("sizes");for(int n:{5,8,9,10,12,13})if(validSize(n)&&(psramFound()||n==5))sizes.add(n);auto controls=o.createNestedObject("controls");bool supported=pid==OV2640_PID||pid==OV3660_PID||pid==OV5640_PID;for(const char*k:{"brightness","contrast","saturation","mirror","flip","white_balance","exposure","gain"})controls[k]=supported;
+  o["capture_fps"]=millis()-lastCaptureAt<2000?captureRate:0;o["captured"]=captured; o["failures"]=failures; o["capture_ms"]=captureUs/1000.0;
   if(ready) { auto s=esp_camera_sensor_get(); o["size"]=s->status.framesize; o["quality"]=s->status.quality; o["brightness"]=s->status.brightness; o["contrast"]=s->status.contrast; o["saturation"]=s->status.saturation; o["mirror"]=s->status.hmirror; o["flip"]=s->status.vflip;o["white_balance"]=s->status.wb_mode;o["exposure"]=s->status.aec?-1:s->status.aec_value;o["gain"]=s->status.agc?-1:s->status.agc_gain; }
 }
 bool startBenchmark() {

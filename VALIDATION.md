@@ -1,12 +1,14 @@
 # Validation and device acceptance
 
+The professional upgrade adds persistent alarm, 64×48 motion analysis, native OV3660/OV5640 acceptance, supported-range light/zoom controls and optional cloud source. See `docs/PROFESSIONAL_TESTS.md` for its additional tests, and `remote/README.md` for account/deployment requirements. Baseline evidence below is historical where sizes/features differ.
+
 ## Evidence from this workspace
 
 - PlatformIO ESP32-CAM builds passed at the essential-recording checkpoint, motion checkpoint, and integrated product checkpoint. Final artifact is `.pio/build/esp32cam/firmware.bin`. See final build result in the delivery message for current linked size. Static RAM is not runtime free-heap evidence.
 - `node tools/test-ui.cjs` passed using installed Edge and Playwright with simulated firmware responses: initial login, remembered Home entry, fresh preview/stale-frame hiding, recording/stop/save states, photo requests, file links/deletion, picture settings, shared Settings preview, AP/STA fields, safe SSID rendering, 390px mobile layout, missing-card disabled actions, flashlight/motion requests, confirmed date-deletion API and logout. No physical camera footage was used.
 - Portable C++ checks passed with assertions enabled: invalid-clock scheduling, overnight weekday ownership and end boundary; motion noise/global-light rejection, consecutive confirmation, cooldown and excluded zones.
 - The same C++ AVI writer finalized 15 real JPEG frames and rejected an injected short write. Python verified RIFF sizes, every index offset/length, and decoded all embedded JPEGs with Pillow. **Full AVI demux/playback through FFmpeg/PyAV was not run:** dependency download failed with DNS/network errors. Real SD AVI playback still requires the device test below.
-- Final PlatformIO build: SUCCESS; static RAM 72,712 / 327,680 bytes (22.2%); application flash 1,112,149 / 3,145,728 bytes (35.4%). These are linked sizes, not runtime memory measurements.
+- Pre-professional checkpoint build: SUCCESS; static RAM 72,712 / 327,680 bytes (22.2%); application flash 1,112,149 / 3,145,728 bytes (35.4%). These are linked sizes, not runtime memory measurements.
 - No serial ESP32 was detected; no firmware upload, sensor identity measurement, SD recording, runtime memory measurement, thermal test or overnight run occurred.
 
 ## Flash and first boot
@@ -37,7 +39,7 @@
 
 16. Use expendable files for deletion tests. Search a known date range; verify count, total size, earliest/latest dates before confirming. Test reversed dates and no matches. Add a new file after searching; it must not join the confirmed batch. Check individual/multiple-page selection deletion. Malformed names, traversal paths, active `.part`, undated and unrelated files must not be deleted by date/retention policies.
 17. Enable retention separately for old photos and videos, with correct clock. Verify only eligible finalized Robetix files are removed while idle; disabling it stops future cleanup. Test free-space cleanup separately: only oldest completed videos, at most eight per attempt. A pending date-search confirmation pauses retention; restart/research as needed. Logs are bounded RAM history.
-18. Test flashlight 0/10/25% during preview, SD photo and recording. Verify no SD corruption, XCLK disturbance, resets or unacceptable heating. It must turn off within 60 seconds and immediately on Privacy/reset. The cap is provisional; reduce output if the board heats or supply sags.
+18. Test flashlight 0/40/100% of the supported range (electrical duty 0/10/25%) during preview, SD photo and recording. Verify no SD corruption, XCLK disturbance, resets or unacceptable heating. It must turn off within 60 seconds and immediately on Privacy/reset. The cap is provisional; reduce output if the board heats or supply sags.
 19. Pause Camera during recording: file finalizes, image hides, light turns off and capture stops. Reboot paused and resume. Test Camera Reset keeps Wi-Fi/files; Factory Reset with typed confirmation clears ownership/network/settings, leaves card media intact, and returns to setup. Do not use Factory Reset on an unbacked-up installation until this behavior has been checked.
 20. Only after these pass, run a supervised 1-hour test then an overnight test using the chosen modes. Log restarts, free/min heap, PSRAM, SD write errors, stream drops and actual clip FPS. Inspect representative beginning/middle/end clips. This is required before claiming unattended stability.
 

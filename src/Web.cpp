@@ -7,6 +7,10 @@
 #include "Engine.h"
 #include "Auth.h"
 #include "Events.h"
+#include "Motion.h"
+#include "Cloud.h"
+#include "Light.h"
+#include <esp_system.h>
 #include "Maintenance.h"
 #include <esp_heap_caps.h>
 #include <esp_http_server.h>
@@ -17,15 +21,16 @@ static httpd_handle_t controlServer,streamServer;
 static int64_t loginAfter=0;
 static std::atomic<uint32_t> streamFrames{0},streamMs{0};
 static std::atomic<bool> streaming{false};
+static uint32_t previewRateAt=0,previewDelivered=0,lastPreviewAt=0,lastPreviewId=0;static float previewRate=0;
 static uint8_t *controlFrame=nullptr,*mediaFrame=nullptr;
 static esp_err_t reply(httpd_req_t*,const char*,const char*);
 static bool query(httpd_req_t*r,const char*key,char*out,size_t size){char q[192];return httpd_req_get_url_query_str(r,q,sizeof(q))==ESP_OK&&httpd_query_key_value(q,key,out,size)==ESP_OK;}
 static esp_err_t cameraFrame(httpd_req_t*r,uint8_t*buffer,bool download){
- Engine::requestPreview();size_t length=0;uint32_t id=0,age=0;
- if(!Engine::copyFrame(buffer,Engine::frameCapacity(),length,id,age))return reply(r,"{\"error\":\"Waiting for a fresh frame\"}","503 Service Unavailable");
- char after[16]={};query(r,"after",after,sizeof(after));if(*after&&strtoul(after,nullptr,10)==id)return reply(r,"{\"error\":\"Waiting for a new frame\"}","503 Service Unavailable");
+ Engine::requestPreview();size_t length=0;uint32_t id=0,age=0;char after[16]={};query(r,"after",after,sizeof(after));
+ if(!Engine::copyFrame(buffer,Engine::frameCapacity(),length,id,age,*after?strtoul(after,nullptr,10):0))return reply(r,"{\"error\":\"Waiting for a fresh frame\"}","503 Service Unavailable");
+
  char seq[16];snprintf(seq,sizeof(seq),"%lu",(unsigned long)id);httpd_resp_set_hdr(r,"X-Frame-Id",seq);httpd_resp_set_hdr(r,"Cache-Control","no-store");httpd_resp_set_type(r,"image/jpeg");
- if(download)httpd_resp_set_hdr(r,"Content-Disposition","attachment; filename=robetix.jpg");return httpd_resp_send(r,(const char*)buffer,length);
+ if(download)httpd_resp_set_hdr(r,"Content-Disposition","attachment; filename=robetix.jpg");esp_err_t result=httpd_resp_send(r,(const char*)buffer,length);if(result==ESP_OK&&!download&&id!=lastPreviewId){uint32_t now=millis();if(!lastPreviewAt||now-lastPreviewAt>2000){previewRateAt=now;previewDelivered=0;previewRate=0;}lastPreviewAt=now;lastPreviewId=id;previewDelivered++;if(now-previewRateAt>=1000){previewRate=previewDelivered*1000.0/(now-previewRateAt);previewRateAt=now;previewDelivered=0;}}return result;
 }
 static esp_err_t reply(httpd_req_t *r,const char *body,const char *status="200 OK") {
   httpd_resp_set_status(r,status); httpd_resp_set_type(r,"application/json"); httpd_resp_set_hdr(r,"Cache-Control","no-store"); return httpd_resp_send(r,body,HTTPD_RESP_USE_STRLEN);
@@ -49,7 +54,7 @@ static bool localPost(httpd_req_t*r) {
 static esp_err_t handler(httpd_req_t*r) {
   String uri=r->uri;int question=uri.indexOf('?');if(question>=0)uri=uri.substring(0,question);
   if(r->method==HTTP_GET && uri=="/") {httpd_resp_set_type(r,"text/html");httpd_resp_set_hdr(r,"Cache-Control","no-store");httpd_resp_set_hdr(r,"X-Frame-Options","DENY");return httpd_resp_send(r,UI,HTTPD_RESP_USE_STRLEN);}
-  if(r->method==HTTP_GET && uri=="/api/session") {StaticJsonDocument<128>d;d["setup"]=adminHash.isEmpty();d["authenticated"]=authorized(r);return json(r,d);}
+  if(r->method==HTTP_GET && uri=="/api/session") {StaticJsonDocument<128>d;d["device"]=passwordHash("public-device-id").substring(0,16);d["setup"]=adminHash.isEmpty();d["authenticated"]=authorized(r);return json(r,d);}
   if(r->method==HTTP_POST && !localPost(r)) return reply(r,"{\"error\":\"JSON required\"}","415 Unsupported Media Type");
   if(r->method==HTTP_POST && uri=="/api/login") {
     if(esp_timer_get_time()<loginAfter)return reply(r,"{\"error\":\"Wait before retrying login\"}","429 Too Many Requests");
@@ -66,16 +71,21 @@ static esp_err_t handler(httpd_req_t*r) {
   if(!authorized(r))return reply(r,"{\"error\":\"Sign in required\"}","401 Unauthorized");
   if(r->method==HTTP_POST && uri=="/api/logout") {String token;authorized(r,&token);Auth::revoke(token);httpd_resp_set_hdr(r,"Set-Cookie","rv=; Path=/; Max-Age=0");return reply(r,"{}");}
   if(r->method==HTTP_GET && uri=="/api/status") {
-    StaticJsonDocument<4096>d;
-    d["uptime"]=millis()/1000;d["heap"]=ESP.getFreeHeap();d["min_heap"]=ESP.getMinFreeHeap();d["psram"]=ESP.getPsramSize();d["free_psram"]=ESP.getFreePsram();
-    d["ip"]=WiFi.localIP().toString();d["ap_ip"]=WiFi.softAPIP().toString();d["connected"]=WiFi.status()==WL_CONNECTED;d["rssi"]=WiFi.RSSI();d["reconnects"]=Network::reconnects.load();d["hotspot"]=prefs.getBool("hotspot",true);d["needs_network_setup"]=!prefs.getBool("netReady",false);d["ap_ssid"]=prefs.getString("apSsid","Robetix-Vision");d["ssid"]=prefs.getString("ssid","");d["streaming"]=streaming.load();d["stream_fps"]=streamMs.load()?streamFrames.load()*1000.0/streamMs.load():0;d["benchmark"]=Camera::busy();
+    StaticJsonDocument<6144>d;
+    d["reset_reason"]=esp_reset_reason();d["uptime"]=millis()/1000;d["heap"]=ESP.getFreeHeap();d["min_heap"]=ESP.getMinFreeHeap();d["psram"]=ESP.getPsramSize();d["free_psram"]=ESP.getFreePsram();
+    d["ip"]=WiFi.localIP().toString();d["ap_ip"]=WiFi.softAPIP().toString();d["connected"]=WiFi.status()==WL_CONNECTED;d["rssi"]=WiFi.RSSI();d["reconnects"]=Network::reconnects.load();d["hotspot"]=prefs.getBool("hotspot",true);d["needs_network_setup"]=!prefs.getBool("netReady",false);d["ap_ssid"]=prefs.getString("apSsid","Robetix-Vision");d["ssid"]=prefs.getString("ssid","");d["preview_fps"]=millis()-lastPreviewAt<2000?previewRate:0;d["streaming"]=streaming.load();d["stream_fps"]=streamMs.load()?streamFrames.load()*1000.0/streamMs.load():0;d["benchmark"]=Camera::busy();
     if(xSemaphoreTake(Camera::mutex,pdMS_TO_TICKS(50))==pdTRUE){Camera::status(d.createNestedObject("camera"));xSemaphoreGive(Camera::mutex);}
-    Storage::status(d.createNestedObject("storage"));Engine::status(d.createNestedObject("app"));return json(r,d);
+    Light::status(d.createNestedObject("flashlight"));Storage::status(d.createNestedObject("storage"));Engine::status(d.createNestedObject("app"));return json(r,d);
   }
   if(r->method==HTTP_GET && uri=="/api/benchmark") {StaticJsonDocument<4096>d;Camera::benchmarkStatus(d.to<JsonObject>());return json(r,d);}
   if(r->method==HTTP_POST && uri=="/api/benchmark") {Engine::Command c;c.action=Engine::Action::Benchmark;return Engine::submit(c)?reply(r,"{}","202 Accepted"):reply(r,"{\"error\":\"Camera busy\"}","409 Conflict");}
   if(r->method==HTTP_GET&&(uri=="/api/preview"||uri=="/api/snapshot"))return cameraFrame(r,controlFrame,uri=="/api/snapshot");
-  if(r->method==HTTP_GET&&uri=="/api/events"){StaticJsonDocument<4096>d;Events::list(d.to<JsonObject>());return json(r,d);}
+  if(r->method==HTTP_GET&&uri=="/api/cloud"){StaticJsonDocument<1024>d;Cloud::status(d.to<JsonObject>());return json(r,d);}
+  if(r->method==HTTP_POST&&uri=="/api/cloud/test"){String err;if(!Cloud::test(err)){StaticJsonDocument<256>d;d["error"]=err;String s;serializeJson(d,s);return reply(r,s.c_str(),"409 Conflict");}return reply(r,"{}","202 Accepted");}
+  if(r->method==HTTP_POST&&uri=="/api/cloud"){if(r->content_len<=0||r->content_len>6144)return reply(r,"{\"error\":\"Cloud configuration is too large\"}","400 Bad Request");String input;input.reserve(r->content_len);char chunk[256];int remaining=r->content_len;while(remaining){int n=httpd_req_recv(r,chunk,min(remaining,255));if(n<=0)return ESP_FAIL;chunk[n]=0;input+=chunk;remaining-=n;}DynamicJsonDocument d(7168);String error;if(deserializeJson(d,input)||!Cloud::configure(d.as<JsonObject>(),error)){StaticJsonDocument<256>out;out["error"]=error.length()?error:"Invalid configuration";String s;serializeJson(out,s);return reply(r,s.c_str(),"400 Bad Request");}return reply(r,"{}","202 Accepted");}
+  if(r->method==HTTP_POST&&uri=="/api/light/settings"){StaticJsonDocument<128>d;if(!body(r,d)||!d["preferred"].is<int>()||!d["auto_off"].is<int>()||d["preferred"].as<int>()<0||d["preferred"].as<int>()>100||d["auto_off"].as<int>()<10||d["auto_off"].as<int>()>300||!Light::configure(d["preferred"],d["auto_off"]))return reply(r,"{\"error\":\"Invalid light settings\"}","400 Bad Request");return reply(r,"{}");}
+  if(r->method==HTTP_POST&&uri=="/api/motion/test"){if(!Motion::available())return reply(r,"{\"error\":\"Motion analysis needs available PSRAM\"}","503 Service Unavailable");Motion::calibrate();return reply(r,"{}");}
+  if(r->method==HTTP_GET&&uri=="/api/events"){StaticJsonDocument<6144>d;Events::list(d.to<JsonObject>());return json(r,d);}
   if(r->method==HTTP_GET&&uri=="/api/cleanup"){StaticJsonDocument<1536>d;Maintenance::status(d.to<JsonObject>());return json(r,d);}
   if(r->method==HTTP_POST&&uri=="/api/cleanup"){
     StaticJsonDocument<512>d;String error;if(!body(r,d))return reply(r,"{\"error\":\"Invalid storage request\"}","400 Bad Request");
@@ -88,7 +98,7 @@ static esp_err_t handler(httpd_req_t*r) {
     StaticJsonDocument<256>d;if(!body(r,d))return reply(r,"{\"error\":\"Invalid action\"}","400 Bad Request");
     String action=d["action"]|"";Engine::Command c;
     if(action=="record")c.action=Engine::Action::Start;else if(action=="stop")c.action=Engine::Action::Stop;else if(action=="photo")c.action=Engine::Action::Photo;else if(action=="restart")c.action=Engine::Action::Restart;
-    else if(action=="light"&&d["brightness"].is<int>()&&d["brightness"].as<int>()>=0&&d["brightness"].as<int>()<=25){c.action=Engine::Action::Light;c.camera[0]=d["brightness"];}
+    else if(action=="light"&&d["brightness"].is<int>()&&d["brightness"].as<int>()>=0&&d["brightness"].as<int>()<=100){c.action=Engine::Action::Light;c.camera[0]=d["brightness"];}
     else if(action=="reset_camera")c.action=Engine::Action::ResetCamera;
     else if(action=="factory_reset"&&String(d["confirmation"]|"")=="ERASE SETTINGS")c.action=Engine::Action::FactoryReset;
     else if(action=="privacy"&&d["enabled"].is<bool>()){c.action=Engine::Action::Privacy;c.flag=d["enabled"];}else return reply(r,"{\"error\":\"Unknown action\"}","400 Bad Request");
@@ -140,13 +150,14 @@ static esp_err_t stream(httpd_req_t*r) {
   // HTTPD purges request headers after sending the response. Keep the authorized
   // token locally and check revocation without rereading the Cookie header.
   if(Camera::busy()||!Camera::ready)return reply(r,"{\"error\":\"Camera unavailable\"}","503 Service Unavailable");
-  streaming=true;streamFrames=0;uint32_t start=millis();esp_err_t err=ESP_OK;
+  streaming=true;streamFrames=0;uint32_t start=millis();esp_err_t err=ESP_OK;uint32_t lastId=0,lastFresh=millis();
   httpd_resp_set_type(r,"multipart/x-mixed-replace;boundary=rvframe");httpd_resp_set_hdr(r,"Cache-Control","no-store");
   while(!Camera::busy()&&!Engine::paused()) {
     if(!Auth::valid(streamSession))break;
     uint32_t frameStart=millis();
     Engine::requestPreview();size_t length=0;uint32_t id=0,age=0;
-    if(!Engine::copyFrame(mediaFrame,Engine::frameCapacity(),length,id,age)){vTaskDelay(pdMS_TO_TICKS(100));if(millis()-start>5000)break;continue;}
+    if(!Engine::copyFrame(mediaFrame,Engine::frameCapacity(),length,id,age,lastId)){vTaskDelay(pdMS_TO_TICKS(100));if(millis()-lastFresh>5000)break;continue;}
+    lastId=id;lastFresh=millis();
     char head[128];int n=snprintf(head,sizeof(head),"--rvframe\r\nContent-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n",unsigned(length));
     err=httpd_resp_send_chunk(r,head,n);if(err==ESP_OK)err=httpd_resp_send_chunk(r,(const char*)mediaFrame,length);if(err==ESP_OK)err=httpd_resp_send_chunk(r,"\r\n",2);
     if(err!=ESP_OK)break;streamFrames++;streamMs=millis()-start;
