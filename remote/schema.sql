@@ -1,4 +1,5 @@
 -- Run once in a dedicated Supabase project. No client may access these tables directly.
+-- Then apply migrations/002_recipients.sql (existing installations run only the migration).
 create extension if not exists pgcrypto;
 create table public.rv_devices(id uuid primary key default gen_random_uuid(),owner uuid not null references auth.users(id),name text not null,token_hash text unique not null,enabled boolean not null default true,last_seen timestamptz,config jsonb not null default '{}',last_notify timestamptz);
 create table public.rv_pair_codes(code_hash text primary key,owner uuid not null references auth.users(id),expires timestamptz not null);

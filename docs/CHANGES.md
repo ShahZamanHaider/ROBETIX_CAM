@@ -1,5 +1,24 @@
 # Files changed in the professional upgrade
 
+## Dynamic WhatsApp recipients follow-up
+
+Compared with `checkpoint/pre-whatsapp-recipients` (`dcbf907`). No runtime npm/firmware dependency was added. The local PostgreSQL/WASM test uses the ignored development-only `.pio/sql-test` PGlite installation.
+
+- `remote/migrations/002_recipients.sql` (new): encrypted-contact fields, delivery ledger, private table permissions, bounded/locked contact saves, one-time legacy import, cooldowns and per-recipient leases.
+- `remote/lib/recipients.mjs` (new): AES-GCM/HMAC phone protection, validation, recipient-aware fanout, one shared media upload, safe provider failures, daily attempt cap and aggregate results.
+- `remote/api/recipients.mjs` (new): owner-only list/add/edit/enable/disable/remove/pause/test actions; no arbitrary test target.
+- `remote/api/health.mjs` (new): nonsensitive public health endpoint.
+- `remote/lib/service.mjs`, `remote/api/device.mjs`: backend-managed recipient protocol, safe legacy migration, heartbeat isolation, existing authenticated native-JPEG upload pipeline preserved.
+- `remote/api/webhook.mjs`, `remote/api/maintenance.mjs`: individual monotonic receipts, legacy receipts and stale-worker reconciliation.
+- `remote/public/index.html`, `remote/public/app.js`, `remote/public/app.css`, `remote/public/recipients.js` (new): mobile English/Urdu contact management, consent, tests, pause, deep links and data clearing on sign-out/authentication expiry.
+- `src/Cloud.cpp`, `data/index.html`: hosted management link replaces local single-number form; recipient details removed from camera status; old number cleared after migration acknowledgement; verified TLS and bounded capture-independent worker retained.
+- `data/i18n.js`, `data/ur.json`, `src/Ui.h`, `remote/public/i18n.js`: shared bilingual resources, provider error translation and generated assets.
+- `remote/.env.example`, `remote/vercel.json`, `remote/schema.sql`: server encryption/budget settings, function duration and migration instructions.
+- `remote/test/service.test.mjs`: 17 API/provider regression suites with mocked upstreams.
+- `tools/test-recipients-sql.mjs` (new): actual PostgreSQL/WASM migration, permission and RPC behavior checks.
+- `tools/test-recipients-ui.cjs` (new), `tools/test-remote-ui.cjs`, `tools/test-ui.cjs`: browser recipient CRUD/privacy/RTL tests plus existing local/remote regressions.
+- `README.md`, `VALIDATION.md`, `docs/CHANGES.md`, `remote/README.md`, `remote/RECIPIENTS.md` (new): operator migration/setup, evidence, limits, current cost references and remaining live-account acceptance.
+
 ## Alarm, motion v2 and English/Urdu follow-up
 
 Compared with checkpoint `c306a41` (`checkpoint/pre-motion-v2`). No firmware library dependency added. New host/browser tests reuse the existing ignored Zig/Playwright tool installations. Generated files are included so firmware/remote assets remain reviewable.

@@ -1,5 +1,7 @@
 # Validation and device acceptance
 
+Latest WhatsApp recipient upgrade: [remote/RECIPIENTS.md](remote/RECIPIENTS.md). Backend/API tests and a local PostgreSQL/WASM migration test cover dynamic encrypted recipients; live Vercel/Supabase/Meta delivery still requires account setup and acceptance testing.
+
 Latest alarm/motion v2 and English/Urdu evidence: [docs/MOTION_V2_VALIDATION.md](docs/MOTION_V2_VALIDATION.md). It supersedes earlier motion timing and alarm implementation details below and records the current build sizes and device acceptance steps.
 
 The professional upgrade adds persistent alarm, 64×48 motion analysis, native OV3660/OV5640 acceptance, supported-range light/zoom controls and optional cloud source. See `docs/PROFESSIONAL_TESTS.md` for its additional tests, and `remote/README.md` for account/deployment requirements. Baseline evidence below is historical where sizes/features differ.

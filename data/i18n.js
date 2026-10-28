@@ -23,6 +23,7 @@ const rules=[
  [/^([a-z_ ]+): (\d+) matching files, (.*?), (\d+) deleted(.*)$/,m=>format('{phase}: {count} matching files, {size}, {deleted} deleted{dates}',{phase:t(m[1]),count:m[2],size:m[3],deleted:m[4],dates:m[5]})],
  [/^Snoozed until (.+)$/,m=>format('Snoozed until {time}',{time:m[1]})],
  [/^Meta (media|template) failed \(HTTP (\d+), code (\d+)\)$/,m=>format('Meta {kind} failed (HTTP {status}, code {code})',{kind:t(m[1]),status:m[2],code:m[3]})],
+ [/^WhatsApp provider rejected the message \(code (\d+)\)$/,m=>format('WhatsApp provider rejected the message (code {code})',{code:m[1]})],
  [/^Camera unavailable: (.*)$/,m=>format('Camera unavailable: {error}',{error:t(m[1])})],
  [/^Native JPEG init failed \(0x([a-fA-F0-9]+)\)\. Check sensor probe, ribbon, native-JPEG support and power\.$/,m=>format('Native JPEG init failed (0x{code}). Check sensor probe, ribbon, native-JPEG support and power.',{code:m[1]})],
  [/^Camera restart failed: (.*?)\. Check ribbon, sensor and power\.$/,m=>format('Camera restart failed: {code}. Check ribbon, sensor and power.',{code:m[1]})],
