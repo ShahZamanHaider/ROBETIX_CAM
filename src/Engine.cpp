@@ -6,6 +6,7 @@
 #include "Motion.h"
 #include "Events.h"
 #include "Cloud.h"
+#include "Live.h"
 #include "Light.h"
 #include "Maintenance.h"
 #include "Schedule.h"
@@ -20,7 +21,7 @@ static char phase[16]="idle",message[160]="",lastFile[40]="";static uint32_t mes
 static Recording recorder;static bool starting=false,cardOwned=false;static camera_status_t previous;static uint32_t nextFrameAt=0;
 static uint32_t nextMotionAt=0,nextAutoAt=0,motionEvent=0;static uint8_t recordOrigin=0;static bool bootOptions=true;
 static uint32_t nextRecordAt=0;
-static bool idleLow=false;static camera_status_t viewingSettings;
+static int remoteTier=-1;static bool idleLow=false;static camera_status_t viewingSettings;
 static const char*optionKeys[]={"name","clip_seconds","reserve_mb","cleanup","recording_quality","recording_fps","preview_fps","motion","motion_photo","motion_record","sensitivity","motion_seconds","min_motion_seconds","cooldown_seconds","quality_mode","recording_mode","zone_x","zone_y","zone_w","zone_h","retain_videos","retain_photos","video_days","photo_days","schedule","schedule_start","schedule_end","schedule_days","timezone_minutes","timelapse_seconds","motion_interval","motion_threshold","motion_cells","motion_neighbors","smaller_movements"};
 static AppOptions mergeOptions(const AppOptions&old,const AppOptions&v,uint64_t mask){AppOptions out=old;
  if(mask&1)strlcpy(out.name,v.name,sizeof(out.name));
@@ -87,7 +88,7 @@ static bool applyProfile(){
  bool ok=Camera::configure(psramFound()?sizes[opts.qualityMode]:FRAMESIZE_QVGA,quality[opts.qualityMode],s.brightness,s.contrast,s.saturation,s.hmirror,s.vflip,true);
  if(ok){Camera::extras(prefs.getInt("wb",0),prefs.getInt("exposure",-1),prefs.getInt("gain",-1),false);xSemaphoreTake(stateMutex,portMAX_DELAY);opts.previewFps=opts.qualityMode==0?3:opts.qualityMode==1?5:3;xSemaphoreGive(stateMutex);}return ok;
 }
-static void restoreIdle(){if(!idleLow)return;if(Camera::ready){auto&s=viewingSettings;Camera::configure(s.framesize,s.quality,s.brightness,s.contrast,s.saturation,s.hmirror,s.vflip,false);Camera::extras(s.wb_mode,s.aec?-1:s.aec_value,s.agc?-1:s.agc_gain,false);}idleLow=false;clearFrame();Motion::rebase();}
+static void restoreIdle(){if(!idleLow)return;if(Camera::ready){auto&s=viewingSettings;Camera::configure(s.framesize,s.quality,s.brightness,s.contrast,s.saturation,s.hmirror,s.vflip,false);Camera::extras(s.wb_mode,s.aec?-1:s.aec_value,s.agc?-1:s.agc_gain,false);}idleLow=false;remoteTier=-1;clearFrame();Motion::rebase();}
 static void restoreCamera(){if(Camera::ready){Camera::configure(previous.framesize,previous.quality,previous.brightness,previous.contrast,previous.saturation,previous.hmirror,previous.vflip,false);Camera::extras(previous.wb_mode,previous.aec?-1:previous.aec_value,previous.agc?-1:previous.agc_gain,false);}clearFrame();Motion::rebase();}
 static void stopRecording(){
  if(!recording)return;setPhase("saving");bool ok=recorder.active&&recorder.finish(opts.timelapseSeconds>0);
@@ -134,17 +135,18 @@ static void task(void*){
    else if(c.action==Action::Restart){stopRecording();say("Restarting camera");delay(500);ESP.restart();}
   }
   uint32_t previewDeadline=previewUntil.load();bool view=previewDeadline&&(int32_t)(previewDeadline-millis())>0;if(previewDeadline&&!view)previewUntil.compare_exchange_strong(previewDeadline,0);
+  bool remoteView=Live::viewing(),remoteDue=Live::wanted();
   bool testingMotion=Motion::testing();bool scheduleOpen=!opts.schedule||recordingWindow(epoch(),opts.timezoneMinutes,opts.scheduleStart,opts.scheduleEnd,opts.scheduleDays);
   if(recording&&recordOrigin&& !scheduleOpen)stopRecording();
   if(!recording&&!privacy&&!Camera::busy()&&scheduleOpen&&(int32_t)(millis()-nextAutoAt)>=0&&(opts.recordingMode==1||(opts.recordingMode==2&&!testingMotion&&Motion::active(opts.motionSeconds*1000UL)))){nextAutoAt=millis()+30000;startRecording(opts.recordingMode);}
   bool monitor=Motion::available()&&(opts.motion||opts.recordingMode==2||testingMotion);
   if(!recording&&!privacy&&!Camera::busy()&&Camera::ready){
-   if(idleLow&&(view||!monitor)){xSemaphoreTake(Camera::mutex,portMAX_DELAY);restoreIdle();xSemaphoreGive(Camera::mutex);}
-   else if(monitor&&!view&&!idleLow){xSemaphoreTake(Camera::mutex,portMAX_DELAY);viewingSettings=esp_camera_sensor_get()->status;auto&s=viewingSettings;idleLow=Camera::configure(FRAMESIZE_QVGA,24,s.brightness,s.contrast,s.saturation,s.hmirror,s.vflip,false);xSemaphoreGive(Camera::mutex);clearFrame();Motion::rebase();}
+   if(idleLow&&(view||(!monitor&&!remoteView)||(remoteView&&remoteTier!=Live::profile())||(!remoteView&&remoteTier>=0))){xSemaphoreTake(Camera::mutex,portMAX_DELAY);restoreIdle();xSemaphoreGive(Camera::mutex);}
+   else if((monitor||remoteView)&&!view&&!idleLow){xSemaphoreTake(Camera::mutex,portMAX_DELAY);viewingSettings=esp_camera_sensor_get()->status;auto&s=viewingSettings;remoteTier=remoteView?Live::profile():-1;framesize_t remoteSize=remoteTier<=0?FRAMESIZE_QVGA:remoteTier==1?FRAMESIZE_VGA:FRAMESIZE_SVGA;idleLow=Camera::configure(psramFound()?remoteSize:FRAMESIZE_QVGA,remoteTier<=0?24:20,s.brightness,s.contrast,s.saturation,s.hmirror,s.vflip,false);xSemaphoreGive(Camera::mutex);clearFrame();Motion::rebase();}
   }
   bool motionDue=monitor&&(int32_t)(millis()-nextMotionAt)>=0;
   bool recordDue=recording&&(int32_t)(millis()-nextRecordAt)>=0;
-  if(privacy||Camera::busy()||!Camera::ready||(!view&&!recordDue&&!photoPending&&!motionDue&&!Cloud::wantsTest())){if(recording&&millis()-recordAt>=opts.clipSeconds*1000UL){stopRecording();nextAutoAt=millis()+500;}delay(20);continue;}
+  if(privacy||Camera::busy()||!Camera::ready||(!view&&!remoteDue&&!recordDue&&!photoPending&&!motionDue&&!Cloud::wantsTest())){if(recording&&millis()-recordAt>=opts.clipSeconds*1000UL){stopRecording();nextAutoAt=millis()+500;}delay(20);continue;}
   uint32_t now=millis();if((int32_t)(now-nextFrameAt)<0&&nextFrameAt-now<=1000){delay(5);continue;}nextFrameAt=now+1000/(recording?opts.recordingFps:opts.previewFps);
   if(xSemaphoreTake(Camera::mutex,pdMS_TO_TICKS(100))!=pdTRUE){delay(5);continue;}
   camera_fb_t*f=Camera::capture();
@@ -163,6 +165,7 @@ static void task(void*){
    if(own&&!cardOwned)xSemaphoreGive(Storage::operationMutex);say("Movement detected");
   }
   if(movement||Cloud::wantsTest())Cloud::offer(f,movement?motionEvent:0,epoch(),opts.name,uint8_t(min(uint32_t(100),Motion::score())),opts.timezoneMinutes);
+  Live::offer(f,recording&&sdWriteUs>50000);
   esp_camera_fb_return(f);xSemaphoreGive(Camera::mutex);
   if(movement&&!recording&&opts.recordingMode==2&&scheduleOpen){nextAutoAt=millis()+30000;startRecording(2);}
   if(recording){bool lowSpace=false;if(recorder.frames&&recorder.frames%25==0)lowSpace=!Storage::reserve(1024*1024,opts.reserveMB,false);bool motionEnded=recordOrigin==2&&millis()-recordAt>5000&&!Motion::active(opts.motionSeconds*1000UL);if(writeFailed||lowSpace||motionEnded||millis()-recordAt>=opts.clipSeconds*1000UL||recorder.frames>=Avi::MAX_FRAMES){stopRecording();nextAutoAt=millis()+(writeFailed||lowSpace?30000:500);if(writeFailed||lowSpace)say("Recording stopped: card write failed or space is low");}}

@@ -1,5 +1,6 @@
 import {randomBytes} from 'node:crypto';
 import {wrap,reply,json,fail,env,fetchBounded,owner,db,rate,hash,storage,prune} from '../lib/service.mjs';
+import {liveConfigured,stopLive} from '../lib/live.mjs';
 export const config={api:{bodyParser:false}};
 export default wrap(async(req,res)=>{
  const action=req.query?.action||new URL(req.url,'https://account.invalid').searchParams.get('action');
@@ -10,10 +11,11 @@ export default wrap(async(req,res)=>{
  if(action==='pair'){
  if(req.method!=='POST')fail(405,'POST required');await rate('pair-owner:'+uid,5,600);const code=randomBytes(5).toString('hex').toUpperCase();await db('rv_pair_codes?owner=eq.'+uid,{method:'DELETE'});await db('rv_pair_codes',{method:'POST',data:{owner:uid,code_hash:hash(code),expires:new Date(Date.now()+300000).toISOString()}});return reply(res,200,{code,expires_in:300});
  }
- const devices=await db('rv_devices?owner=eq.'+uid+'&select=id,name,enabled,last_seen,config');
- if(action==='devices'&&req.method==='GET')return reply(res,200,{devices:devices.map(d=>({id:d.id,name:d.name,enabled:d.enabled,remote:!!d.config.remote,last_seen:d.last_seen,online:!!d.enabled&&Date.now()-Date.parse(d.last_seen)<150000}))});
+ const devices=await db('rv_devices?owner=eq.'+uid+'&order=enabled.desc,last_seen.desc.nullslast&limit=50&select=*');
+ if(action==='devices'&&req.method==='GET')return reply(res,200,{capabilities:{setup:process.env.CAMERA_SETUP_ENABLED==='true',live:liveConfigured()},devices:devices.map(d=>({id:d.id,name:d.display_name||d.name,enabled:d.enabled,remote:!!d.config.remote,last_seen:d.last_seen,online:!!d.enabled&&Date.now()-Date.parse(d.last_seen)<150000}))});
  const id=req.query?.id||new URL(req.url,'https://account.invalid').searchParams.get('id'),d=devices.find(d=>d.id===id);if(!d)fail(404,'Camera not found');
- if(action==='revoke'&&req.method==='POST'){await db('rv_devices?id=eq.'+d.id,{method:'PATCH',data:{enabled:false,token_hash:hash(randomBytes(32))}});return reply(res,200,{revoked:true})}
+ if(action==='rename'&&req.method==='POST'){if(process.env.CAMERA_SETUP_ENABLED!=='true')fail(503,'Camera setup needs a service update');const v=await json(req);if(typeof v.name!=='string'||!v.name.trim()||v.name.trim().length>48||/[\u0000-\u001f\u007f]/.test(v.name))fail(400,'Enter a camera name of 1–48 characters');await db('rv_devices?id=eq.'+d.id,{method:'PATCH',data:{display_name:v.name.trim()}});return reply(res,200,{renamed:true})}
+ if(action==='revoke'&&req.method==='POST'){await db('rv_devices?id=eq.'+d.id,{method:'PATCH',data:{enabled:false,token_hash:hash(randomBytes(32))}});let live_stopped=true;try{await stopLive(d.id)}catch{live_stopped=false}return reply(res,200,{revoked:true,live_stopped})}
  if(!d.enabled||!d.config.remote)fail(403,'Remote photo access is disabled');
  if(action==='events'&&req.method==='GET'){await prune(d);const events=await db('rv_events?device=eq.'+d.id+'&order=created_at.desc&limit=12&select=id,created_at,epoch,offset_minutes,score,notification,photo');return reply(res,200,{events:events.map(e=>({...e,photo:!!e.photo}))})}
  if(action==='photo'&&req.method==='GET'){

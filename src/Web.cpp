@@ -53,6 +53,7 @@ static bool localPost(httpd_req_t*r) {
 }
 static esp_err_t handler(httpd_req_t*r) {
   String uri=r->uri;int question=uri.indexOf('?');if(question>=0)uri=uri.substring(0,question);
+  if(r->method==HTTP_GET&&(uri=="/generate_204"||uri=="/hotspot-detect.html"||uri=="/connecttest.txt"||uri=="/ncsi.txt")){httpd_resp_set_status(r,"302 Found");httpd_resp_set_hdr(r,"Location","http://192.168.4.1/");return httpd_resp_send(r,"",0);}
   if(r->method==HTTP_GET && uri=="/") {httpd_resp_set_type(r,"text/html");httpd_resp_set_hdr(r,"Cache-Control","no-store");httpd_resp_set_hdr(r,"X-Frame-Options","DENY");return httpd_resp_send(r,UI,HTTPD_RESP_USE_STRLEN);}
   if(r->method==HTTP_GET && uri=="/api/session") {StaticJsonDocument<128>d;d["device"]=passwordHash("public-device-id").substring(0,16);d["setup"]=adminHash.isEmpty();d["authenticated"]=authorized(r);return json(r,d);}
   if(r->method==HTTP_POST && !localPost(r)) return reply(r,"{\"error\":\"JSON required\"}","415 Unsupported Media Type");
@@ -73,14 +74,14 @@ static esp_err_t handler(httpd_req_t*r) {
   if(r->method==HTTP_GET && uri=="/api/status") {
     StaticJsonDocument<6144>d;
     d["reset_reason"]=esp_reset_reason();d["uptime"]=millis()/1000;d["heap"]=ESP.getFreeHeap();d["min_heap"]=ESP.getMinFreeHeap();d["psram"]=ESP.getPsramSize();d["free_psram"]=ESP.getFreePsram();
-    d["ip"]=WiFi.localIP().toString();d["ap_ip"]=WiFi.softAPIP().toString();d["connected"]=WiFi.status()==WL_CONNECTED;d["rssi"]=WiFi.RSSI();d["reconnects"]=Network::reconnects.load();d["hotspot"]=prefs.getBool("hotspot",true);d["needs_network_setup"]=!prefs.getBool("netReady",false);d["ap_ssid"]=prefs.getString("apSsid","Robetix-Vision");d["ssid"]=prefs.getString("ssid","");d["preview_fps"]=millis()-lastPreviewAt<2000?previewRate:0;d["streaming"]=streaming.load();d["stream_fps"]=streamMs.load()?streamFrames.load()*1000.0/streamMs.load():0;d["benchmark"]=Camera::busy();
+    d["ip"]=WiFi.localIP().toString();d["ap_ip"]=WiFi.softAPIP().toString();d["connected"]=WiFi.status()==WL_CONNECTED;d["rssi"]=WiFi.RSSI();d["reconnects"]=Network::reconnects.load();d["hotspot"]=prefs.getBool("hotspot",true);d["needs_network_setup"]=!prefs.getBool("netReady",false);d["ap_ssid"]=prefs.getString("apSsid",setupSsid);d["ssid"]=prefs.getString("ssid","");d["preview_fps"]=millis()-lastPreviewAt<2000?previewRate:0;d["streaming"]=streaming.load();d["stream_fps"]=streamMs.load()?streamFrames.load()*1000.0/streamMs.load():0;d["benchmark"]=Camera::busy();
     if(xSemaphoreTake(Camera::mutex,pdMS_TO_TICKS(50))==pdTRUE){Camera::status(d.createNestedObject("camera"));xSemaphoreGive(Camera::mutex);}
     Light::status(d.createNestedObject("flashlight"));Storage::status(d.createNestedObject("storage"));Engine::status(d.createNestedObject("app"));return json(r,d);
   }
   if(r->method==HTTP_GET && uri=="/api/benchmark") {StaticJsonDocument<4096>d;Camera::benchmarkStatus(d.to<JsonObject>());return json(r,d);}
   if(r->method==HTTP_POST && uri=="/api/benchmark") {Engine::Command c;c.action=Engine::Action::Benchmark;return Engine::submit(c)?reply(r,"{}","202 Accepted"):reply(r,"{\"error\":\"Camera busy\"}","409 Conflict");}
   if(r->method==HTTP_GET&&(uri=="/api/preview"||uri=="/api/snapshot"))return cameraFrame(r,controlFrame,uri=="/api/snapshot");
-  if(r->method==HTTP_GET&&uri=="/api/cloud"){StaticJsonDocument<1024>d;Cloud::status(d.to<JsonObject>());return json(r,d);}
+  if(r->method==HTTP_GET&&uri=="/api/cloud"){StaticJsonDocument<2048>d;Cloud::status(d.to<JsonObject>());return json(r,d);}
   if(r->method==HTTP_POST&&uri=="/api/cloud/test"){String err;if(!Cloud::test(err)){StaticJsonDocument<256>d;d["error"]=err;String s;serializeJson(d,s);return reply(r,s.c_str(),"409 Conflict");}return reply(r,"{}","202 Accepted");}
   if(r->method==HTTP_POST&&uri=="/api/cloud"){if(r->content_len<=0||r->content_len>6144)return reply(r,"{\"error\":\"Cloud configuration is too large\"}","400 Bad Request");String input;input.reserve(r->content_len);char chunk[256];int remaining=r->content_len;while(remaining){int n=httpd_req_recv(r,chunk,min(remaining,255));if(n<=0)return ESP_FAIL;chunk[n]=0;input+=chunk;remaining-=n;}DynamicJsonDocument d(7168);String error;if(deserializeJson(d,input)||!Cloud::configure(d.as<JsonObject>(),error)){StaticJsonDocument<256>out;out["error"]=error.length()?error:"Invalid configuration";String s;serializeJson(out,s);return reply(r,s.c_str(),"400 Bad Request");}return reply(r,"{}","202 Accepted");}
   if(r->method==HTTP_POST&&uri=="/api/light/settings"){StaticJsonDocument<128>d;if(!body(r,d)||!d["preferred"].is<int>()||!d["auto_off"].is<int>()||d["preferred"].as<int>()<0||d["preferred"].as<int>()>100||d["auto_off"].as<int>()<10||d["auto_off"].as<int>()>300||!Light::configure(d["preferred"],d["auto_off"]))return reply(r,"{\"error\":\"Invalid light settings\"}","400 Bad Request");return reply(r,"{}");}
@@ -128,8 +129,9 @@ static esp_err_t handler(httpd_req_t*r) {
     String ssid=d["ssid"]|"",pass=d["password"]|"";bool hotspot=d["hotspot"];
     String apSsid=d["ap_ssid"]|"",apPass=d["ap_password"]|"";
     bool firstSetup=!prefs.getBool("netReady",false);
-    if(apPass.isEmpty() && !firstSetup) apPass=prefs.getString("apPass","");
-    if(apSsid.isEmpty() || apSsid.length()>32 || apPass.length()<8 || apPass.length()>63 || apPass==SETUP_AP_PASSWORD)
+    if(apPass.isEmpty()) apPass=prefs.getString("apPass",setupPassword);
+    if(apSsid.isEmpty())apSsid=prefs.getString("apSsid",setupSsid);
+    if(apSsid.isEmpty() || apSsid.length()>32 || apPass.length()<8 || apPass.length()>63)
       return reply(r,"{\"error\":\"Choose a hotspot name (1–32 bytes) and your own hotspot password (8–63 characters)\"}","400 Bad Request");
     if(!hotspot && (ssid.isEmpty()||ssid.length()>32||pass.length()>63||(pass.length()>0&&pass.length()<8)))return reply(r,"{\"error\":\"Check SSID and Wi-Fi password lengths\"}","400 Bad Request");
     bool saved=prefs.putString("apSsid",apSsid)>0 && prefs.putString("apPass",apPass)>0;

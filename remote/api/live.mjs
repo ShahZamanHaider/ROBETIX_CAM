@@ -1,0 +1,4 @@
+import {wrap,reply,json,fail,owner,db,rate} from '../lib/service.mjs';
+import {appOrigin} from '../lib/session.mjs';import {uuid} from '../lib/recipients.mjs';import {liveConfigured,liveTicket} from '../lib/live.mjs';
+export const config={api:{bodyParser:false}};
+export default wrap(async(req,res)=>{const uid=await owner(req,res);if(req.method!=='POST')fail(405,'POST required');await rate('live-view:'+uid,60,60);const v=await json(req);if(!uuid(v.device)||!Number.isInteger(v.quality)||v.quality<0||v.quality>2)fail(400,'Choose a camera and picture quality');const d=(await db('rv_devices?id=eq.'+v.device+'&owner=eq.'+uid))[0];if(!d)fail(404,'Camera not found');if(!d.enabled||!d.config.remote)fail(403,'Remote viewing is off on this camera');if(!liveConfigured())fail(503,'Live viewing setup is not complete');return reply(res,200,liveTicket(d.id,'viewer',{origin:appOrigin(req),quality:v.quality,subject:uid}));});

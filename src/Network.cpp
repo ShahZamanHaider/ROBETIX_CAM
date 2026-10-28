@@ -2,13 +2,14 @@
 #include "Settings.h"
 #include <WiFi.h>
 #include <ESPmDNS.h>
+#include <DNSServer.h>
 #include <atomic>
 #include <time.h>
 namespace Network {
 std::atomic<uint32_t> reconnects{0}; static uint32_t nextTry=0,backoff=10000,nextMdns=0; static bool mdns=false;
 static std::atomic<uint32_t> applyAt{0};
 static bool useRouter=false;
-static bool ntpStarted=false;
+static bool ntpStarted=false;static DNSServer setupDns;static bool dnsActive=false;
 static String routerSsid,routerPassword;
 void changed(){applyAt=(millis()+2000)|1U;}
 static void apply() {
@@ -17,11 +18,12 @@ static void apply() {
   bool configured=prefs.getBool("netReady",false);
   useRouter=configured&&!prefs.getBool("hotspot",true);
   routerSsid=prefs.getString("ssid","");routerPassword=prefs.getString("wifiPass","");
-  String name=configured?prefs.getString("apSsid","Robetix-Vision"):String(SETUP_AP_SSID);
-  String password=configured?prefs.getString("apPass",""):String(SETUP_AP_PASSWORD);
-  WiFi.softAPdisconnect(false);
+  String name=configured?prefs.getString("apSsid","Robetix-Vision"):setupSsid;
+  String password=configured?prefs.getString("apPass",setupPassword):setupPassword;
+  setupDns.stop();dnsActive=false;WiFi.softAPdisconnect(false);
   if(!WiFi.softAP(name.c_str(),password.c_str(),1,false,2)) Serial.println("AP start failed");
   Serial.printf("AP: %s URL http://192.168.4.1 (configure credentials in browser)\n",name.c_str());
+  if(!configured)dnsActive=setupDns.start(53,"*",WiFi.softAPIP());
   nextTry=millis();backoff=10000;nextMdns=0;
 }
 void begin() {
@@ -29,6 +31,7 @@ void begin() {
   apply();
 }
 void tick() {
+  if(dnsActive)setupDns.processNextRequest();
   uint32_t due=applyAt.load();
   if(due) {
     if((int32_t)(millis()-due)<0) return;

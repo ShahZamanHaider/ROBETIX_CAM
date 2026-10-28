@@ -696,5 +696,11 @@
   "10 minutes": "10 منٹ",
   "Join your router’s Wi-Fi on this phone for Internet access. The camera hotspot stays available for local recovery and does not share Internet.": "انٹرنیٹ کے لیے فون کو اپنے راؤٹر کے وائی فائی سے ملائیں۔ کیمرے کا ہاٹ اسپاٹ مقامی رسائی کے لیے ہے، یہ انٹرنیٹ شیئر نہیں کرتا۔",
   "Connect directly for local viewing. “No Internet” on the camera hotspot is normal.": "مقامی ویڈیو کے لیے کیمرے سے براہِ راست جڑیں۔ اس ہاٹ اسپاٹ پر انٹرنیٹ نہ ہونے کا پیغام معمول کی بات ہے۔",
-  "Wi-Fi saved. Join your router’s Wi-Fi on this phone, then open http://robetix.local. If the camera cannot join, reconnect to its hotspot at http://192.168.4.1 and check the router name and password.": "وائی فائی محفوظ ہو گیا۔ فون کو راؤٹر کے وائی فائی سے ملائیں، پھر http://robetix.local کھولیں۔ اگر کیمرہ نہ جڑے تو اس کے ہاٹ اسپاٹ پر http://192.168.4.1 کھول کر راؤٹر کا نام اور پاس ورڈ چیک کریں۔"
+  "Wi-Fi saved. Join your router’s Wi-Fi on this phone, then open http://robetix.local. If the camera cannot join, reconnect to its hotspot at http://192.168.4.1 and check the router name and password.": "وائی فائی محفوظ ہو گیا۔ فون کو راؤٹر کے وائی فائی سے ملائیں، پھر http://robetix.local کھولیں۔ اگر کیمرہ نہ جڑے تو اس کے ہاٹ اسپاٹ پر http://192.168.4.1 کھول کر راؤٹر کا نام اور پاس ورڈ چیک کریں۔",
+  "Connect to my account": "میرے اکاؤنٹ سے جوڑیں",
+  "Pairing code": "جوڑنے کا کوڈ",
+  "Connect camera": "کیمرہ جوڑیں",
+  "Open robetixvision.vercel.app on a phone with Internet. Sign in and tap Pair a camera.": "انٹرنیٹ والے فون پر robetixvision.vercel.app کھولیں۔ سائن اِن کریں اور کیمرہ جوڑیں دبائیں۔",
+  "Enter the code from your account. No certificate is needed.": "اپنے اکاؤنٹ کا کوڈ درج کریں۔ کسی سرٹیفکیٹ کی ضرورت نہیں۔",
+  "Reconnect using your camera setup card, then open 192.168.4.1.": "کیمرے کے سیٹ اپ کارڈ سے دوبارہ وائی فائی جوڑیں، پھر 192.168.4.1 کھولیں۔"
 }
