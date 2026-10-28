@@ -2,6 +2,8 @@
 
 Standalone CCTV firmware for the original AI Thinker ESP32-CAM, native-JPEG camera and microSD. The camera serves its own phone-friendly application. Essential local operation needs no cloud service or continuously running computer.
 
+Current authentication upgrade: [remote/AUTHENTICATION.md](remote/AUTHENTICATION.md). Development/release workflow: [docs/DEVELOPMENT_WORKFLOW.md](docs/DEVELOPMENT_WORKFLOW.md). These extend the existing deployed service and Supabase account; no application database migration or recreation is required for authentication.
+
 This is a software-tested development release. No ESP32 serial device was available during this upgrade; camera/card behavior, detection accuracy, sustained FPS, electrical limits and overnight stability have **not** been verified on hardware. See [VALIDATION.md](VALIDATION.md) for the actual evidence and test sequence.
 
 ## Build, flash, connect
@@ -86,7 +88,7 @@ Remembered local sessions store hashes of random device tokens, not the administ
 
 [remote/README.md](remote/README.md) explains what Supabase is, account creation, a new Vercel project, exact deployment variables, service-root certificate provisioning, pairing, Meta templates/webhooks, costs and `vision.robetix.com` DNS. Do not modify the main site/portfolio. The cloud client verifies HTTPS using the supplied trusted root and requires a valid clock. It never stores Meta credentials, uses bounded uploads/timeouts/retries, skips on low internal heap and does not block capture with network requests. Internet outage only affects optional features.
 
-No actual cloud/account deployment, SQL execution, WhatsApp delivery or worldwide access was verified. Remote live video, remote camera commands, MFA UI and production security/availability certification are deferred. Browser alarms cannot force a locked phone or a WhatsApp notification to ring continuously.
+The user has deployed the existing service at `https://robetixvision.vercel.app` and installed the Supabase schema/recipient migration. Read-only checks confirmed health version 2 at the starting commit, rejected unauthenticated camera listing, signup disabled, email enabled and existing tables. Real WhatsApp delivery and physical camera-to-cloud operation remain unverified here. Remote live video, remote camera commands, MFA UI and production security/availability certification are deferred. Browser alarms cannot force a locked phone or a WhatsApp notification to ring continuously.
 
 ## Evidence, preservation and remaining work
 

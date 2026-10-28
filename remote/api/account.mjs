@@ -6,7 +6,7 @@ export default wrap(async(req,res)=>{
  if(action==='login'){
  if(req.method!=='POST')fail(405,'POST required');await rate('login:'+req.headers['x-forwarded-for'],10,600);const v=await json(req);if(typeof v.email!=='string'||v.email.length>254||typeof v.password!=='string'||v.password.length>256)fail(400,'Invalid login');const r=await fetchBounded(env('SUPABASE_URL')+'/auth/v1/token?grant_type=password',{method:'POST',headers:{apikey:env('SUPABASE_ANON_KEY'),'Content-Type':'application/json'},body:JSON.stringify({email:v.email,password:v.password})},16384);if(!r.ok)fail(401,'Check your account credentials');const data=r.json();return reply(res,200,{access_token:data.access_token,expires_in:data.expires_in});
  }
- const uid=await owner(req);await rate('owner:'+uid,120,60);
+ const uid=await owner(req,res);await rate('owner:'+uid,120,60);
  if(action==='pair'){
  if(req.method!=='POST')fail(405,'POST required');await rate('pair-owner:'+uid,5,600);const code=randomBytes(5).toString('hex').toUpperCase();await db('rv_pair_codes?owner=eq.'+uid,{method:'DELETE'});await db('rv_pair_codes',{method:'POST',data:{owner:uid,code_hash:hash(code),expires:new Date(Date.now()+300000).toISOString()}});return reply(res,200,{code,expires_in:300});
  }

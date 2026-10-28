@@ -40,7 +40,7 @@ const server=http.createServer((req,res)=>{
 });
 (async()=>{
  await new Promise(r=>server.listen(0,'127.0.0.1',r));
- const browser=await chromium.launch({channel:'msedge',headless:true});const page=await browser.newPage({viewport:{width:1440,height:1000}});const errors=[],dialogs=[];page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>{dialogs.push(d.message());return d.accept()});
+ const browser=await chromium.launch({channel:process.env.ROBETIX_BROWSER_CHANNEL||'msedge',headless:true});const page=await browser.newPage({viewport:{width:1440,height:1000}});const errors=[],dialogs=[];page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>{dialogs.push(d.message());return d.accept()});
  try{
   await page.goto('http://127.0.0.1:'+server.address().port);await page.locator('#setupHelp').waitFor({state:'visible'});
   await page.locator('#password').fill('test-password-123');await page.locator('#loginForm button').click();

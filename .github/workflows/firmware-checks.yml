@@ -1,0 +1,18 @@
+name: Firmware compile
+on:
+  push:
+    paths: ['src/**', 'data/**', 'platformio.ini', 'tools/embed_ui.py', '.github/workflows/firmware-checks.yml']
+  pull_request:
+    paths: ['src/**', 'data/**', 'platformio.ini', 'tools/embed_ui.py', '.github/workflows/firmware-checks.yml']
+permissions:
+  contents: read
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: pip install platformio==6.2.0
+      - run: pio run

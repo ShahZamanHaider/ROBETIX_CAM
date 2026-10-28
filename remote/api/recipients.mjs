@@ -2,7 +2,7 @@ import {wrap,owner,rate,db,rpc,json,fail,reply,providerConfigured,notify,prune} 
 import {uuid,recipients,publicRecipient,recipientValue,initializeRecipients} from '../lib/recipients.mjs';
 export const config={api:{bodyParser:false}};
 export default wrap(async(req,res)=>{
- const uid=await owner(req);await rate('recipient-admin:'+uid,90,60);
+ const uid=await owner(req,res);await rate('recipient-admin:'+uid,90,60);
  const q=new URL(req.url,'https://recipients.invalid').searchParams,device=q.get('device'),action=q.get('action')||'list';
  if(!uuid(device))fail(400,'Invalid camera');const d=(await db('rv_devices?id=eq.'+device+'&owner=eq.'+uid))[0];if(!d)fail(404,'Camera not found');
  if(action==='list'&&req.method==='GET'){

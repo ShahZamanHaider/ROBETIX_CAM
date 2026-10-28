@@ -32,5 +32,11 @@
         }
       ]
     }
+  ],
+  "rewrites": [
+    {
+      "destination": "/index.html",
+      "source": "/reset-password"
+    }
   ]
 }
