@@ -16,6 +16,7 @@
 #include <esp_http_server.h>
 #include <esp_timer.h>
 #include <WiFi.h>
+#include <lwip/sockets.h>
 #include <atomic>
 static httpd_handle_t controlServer,streamServer;
 static int64_t loginAfter=0;
@@ -53,9 +54,22 @@ static bool localPost(httpd_req_t*r) {
 }
 static esp_err_t handler(httpd_req_t*r) {
   String uri=r->uri;int question=uri.indexOf('?');if(question>=0)uri=uri.substring(0,question);
+  if(r->method==HTTP_GET&&(uri=="/generate_204"||uri=="/hotspot-detect.html"||uri=="/connecttest.txt"||uri=="/ncsi.txt")){httpd_resp_set_status(r,"302 Found");httpd_resp_set_hdr(r,"Location","http://192.168.4.1/");return httpd_resp_send(r,"",0);}
   if(r->method==HTTP_GET && uri=="/") {httpd_resp_set_type(r,"text/html");httpd_resp_set_hdr(r,"Cache-Control","no-store");httpd_resp_set_hdr(r,"X-Frame-Options","DENY");return httpd_resp_send(r,UI,HTTPD_RESP_USE_STRLEN);}
-  if(r->method==HTTP_GET && uri=="/api/session") {StaticJsonDocument<128>d;d["device"]=passwordHash("public-device-id").substring(0,16);d["setup"]=adminHash.isEmpty();d["authenticated"]=authorized(r);return json(r,d);}
+  if(r->method==HTTP_GET && uri=="/api/session") {StaticJsonDocument<192>d;d["device"]=passwordHash("public-device-id").substring(0,16);d["setup"]=adminHash.isEmpty();d["password_enabled"]=!prefs.getBool("cardOwner",false);d["authenticated"]=authorized(r);return json(r,d);}
   if(r->method==HTTP_POST && !localPost(r)) return reply(r,"{\"error\":\"JSON required\"}","415 Unsupported Media Type");
+  if(r->method==HTTP_POST&&uri=="/api/accept-handoff"){StaticJsonDocument<128>d;if(!body(r,d))return reply(r,"{\"error\":\"Invalid request\"}","400 Bad Request");bool remember=false;String token=Auth::acceptHandoff(d["code"]|"",remember);if(token.isEmpty())return reply(r,"{\"error\":\"Local access link expired. Open the camera from your trusted page again.\"}","403 Forbidden");String cookie="rv="+token+"; HttpOnly; SameSite=Strict; Path=/";if(remember)cookie+="; Max-Age=31536000";httpd_resp_set_hdr(r,"Set-Cookie",cookie.c_str());return reply(r,"{}");}
+  if(r->method==HTTP_POST&&(uri=="/api/provision"||uri=="/api/trust")){
+    if(esp_timer_get_time()<loginAfter)return reply(r,"{\"error\":\"Wait before retrying login\"}","429 Too Many Requests");loginAfter=esp_timer_get_time()+2000000;
+    StaticJsonDocument<256>d;if(!body(r,d))return reply(r,"{\"error\":\"Invalid request\"}","400 Bad Request");String token,error;
+    if(uri=="/api/provision"){
+      sockaddr_in local={};socklen_t size=sizeof(local);String code=d["code"]|"";
+      if(!adminHash.isEmpty()||getsockname(httpd_req_to_sockfd(r),(sockaddr*)&local,&size)!=0||IPAddress(local.sin_addr.s_addr)!=WiFi.softAPIP()||code!=setupPassword)return reply(r,"{\"error\":\"Join the camera Wi-Fi and enter the private setup-card code\"}","403 Forbidden");
+      if(!setAdminPassword(randomHex(24))||!prefs.putBool("cardOwner",true))return reply(r,"{\"error\":\"Settings write failed\"}","500 Internal Server Error");token=Auth::issue(true);
+    }else token=Auth::trust(d["code"]|"",error);
+    if(token.isEmpty()){StaticJsonDocument<256>out;out["error"]=error.length()?error:"Could not create session";String text;serializeJson(out,text);return reply(r,text.c_str(),"403 Forbidden");}
+    String cookie="rv="+token+"; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000";httpd_resp_set_hdr(r,"Set-Cookie",cookie.c_str());return reply(r,"{}");
+  }
   if(r->method==HTTP_POST && uri=="/api/login") {
     if(esp_timer_get_time()<loginAfter)return reply(r,"{\"error\":\"Wait before retrying login\"}","429 Too Many Requests");
     loginAfter=esp_timer_get_time()+2000000;
@@ -63,24 +77,33 @@ static esp_err_t handler(httpd_req_t*r) {
     String pass=d["password"]|"";
     if(adminHash.isEmpty()) {
       if(pass.length()<12 || pass.length()>64)return reply(r,"{\"error\":\"Choose a 12–64 character administrator password\"}","400 Bad Request");
-      adminHash=passwordHash(pass);if(!prefs.putString("admin",adminHash)){adminHash="";return reply(r,"{\"error\":\"Settings write failed\"}","500 Internal Server Error");}
+      if(!setAdminPassword(pass)){return reply(r,"{\"error\":\"Settings write failed\"}","500 Internal Server Error");}
     } else if(pass.length()>64 || passwordHash(pass)!=adminHash) return reply(r,"{\"error\":\"Incorrect password\"}","403 Forbidden");
     bool remember=d["remember"]|false;String token=Auth::issue(remember);if(token.isEmpty())return reply(r,"{\"error\":\"Could not create session\"}","500 Internal Server Error");String cookie="rv="+token+"; HttpOnly; SameSite=Strict; Path=/";if(remember)cookie+="; Max-Age=31536000";
     httpd_resp_set_hdr(r,"Set-Cookie",cookie.c_str());return reply(r,"{}");
   }
+  if(r->method==HTTP_POST&&uri=="/api/recover"){
+    if(esp_timer_get_time()<loginAfter)return reply(r,"{\"error\":\"Wait before retrying login\"}","429 Too Many Requests");loginAfter=esp_timer_get_time()+2000000;
+    StaticJsonDocument<512>d;if(!body(r,d))return reply(r,"{\"error\":\"Invalid request\"}","400 Bad Request");String error;
+    if(!Auth::recover(d["code"]|"",d["password"]|"",error)){StaticJsonDocument<256>out;out["error"]=error.length()?error:"Recovery is unavailable";String text;serializeJson(out,text);return reply(r,text.c_str(),"403 Forbidden");}
+    httpd_resp_set_hdr(r,"Set-Cookie","rv=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict");return reply(r,"{\"updated\":true}");
+  }
   if(!authorized(r))return reply(r,"{\"error\":\"Sign in required\"}","401 Unauthorized");
+  if(r->method==HTTP_POST&&uri=="/api/handoff"){String token;authorized(r,&token);String code=Auth::handoff(token);if(code.isEmpty()||!Network::connected())return reply(r,"{\"error\":\"Connect to home Wi-Fi first\"}","409 Conflict");StaticJsonDocument<192>d;d["code"]=code;d["ip"]=WiFi.localIP().toString();d["expires_in"]=60;return json(r,d);}
+  if(r->method==HTTP_POST&&uri=="/api/authorize"){if(esp_timer_get_time()<loginAfter)return reply(r,"{\"error\":\"Wait before retrying login\"}","429 Too Many Requests");loginAfter=esp_timer_get_time()+2000000;StaticJsonDocument<256>d;if(!body(r,d))return reply(r,"{\"error\":\"Invalid request\"}","400 Bad Request");String token,error;authorized(r,&token);return Auth::authorize(token,d["proof"]|"",error)?reply(r,"{}"):reply(r,"{\"error\":\"Use your camera password or a fresh USB recovery code\"}","403 Forbidden");}
+  if(r->method==HTTP_POST&&uri=="/api/setup"){StaticJsonDocument<64>d;if(!body(r,d)||d["complete"]!=true)return reply(r,"{\"error\":\"Invalid request\"}","400 Bad Request");return prefs.putBool("setupDone",true)?reply(r,"{}"):reply(r,"{\"error\":\"Settings write failed\"}","500 Internal Server Error");}
   if(r->method==HTTP_POST && uri=="/api/logout") {String token;authorized(r,&token);Auth::revoke(token);httpd_resp_set_hdr(r,"Set-Cookie","rv=; Path=/; Max-Age=0");return reply(r,"{}");}
   if(r->method==HTTP_GET && uri=="/api/status") {
     StaticJsonDocument<6144>d;
-    d["reset_reason"]=esp_reset_reason();d["uptime"]=millis()/1000;d["heap"]=ESP.getFreeHeap();d["min_heap"]=ESP.getMinFreeHeap();d["psram"]=ESP.getPsramSize();d["free_psram"]=ESP.getFreePsram();
-    d["ip"]=WiFi.localIP().toString();d["ap_ip"]=WiFi.softAPIP().toString();d["connected"]=WiFi.status()==WL_CONNECTED;d["rssi"]=WiFi.RSSI();d["reconnects"]=Network::reconnects.load();d["hotspot"]=prefs.getBool("hotspot",true);d["needs_network_setup"]=!prefs.getBool("netReady",false);d["ap_ssid"]=prefs.getString("apSsid","Robetix-Vision");d["ssid"]=prefs.getString("ssid","");d["preview_fps"]=millis()-lastPreviewAt<2000?previewRate:0;d["streaming"]=streaming.load();d["stream_fps"]=streamMs.load()?streamFrames.load()*1000.0/streamMs.load():0;d["benchmark"]=Camera::busy();
+    d["setup_complete"]=prefs.getBool("setupDone",true);d["reset_reason"]=esp_reset_reason();d["uptime"]=millis()/1000;d["heap"]=ESP.getFreeHeap();d["min_heap"]=ESP.getMinFreeHeap();d["psram"]=ESP.getPsramSize();d["free_psram"]=ESP.getFreePsram();
+    JsonObject net=d.createNestedObject("network");Network::status(net);for(const char*k:{"ip","ap_ip","connected","hotspot","needs_network_setup","ap_ssid","ssid"})d[k]=net[k];d["rssi"]=Network::connected()?WiFi.RSSI():0;d["reconnects"]=Network::reconnects.load();d["preview_fps"]=millis()-lastPreviewAt<2000?previewRate:0;d["streaming"]=streaming.load();d["stream_fps"]=streamMs.load()?streamFrames.load()*1000.0/streamMs.load():0;d["benchmark"]=Camera::busy();
     if(xSemaphoreTake(Camera::mutex,pdMS_TO_TICKS(50))==pdTRUE){Camera::status(d.createNestedObject("camera"));xSemaphoreGive(Camera::mutex);}
     Light::status(d.createNestedObject("flashlight"));Storage::status(d.createNestedObject("storage"));Engine::status(d.createNestedObject("app"));return json(r,d);
   }
   if(r->method==HTTP_GET && uri=="/api/benchmark") {StaticJsonDocument<4096>d;Camera::benchmarkStatus(d.to<JsonObject>());return json(r,d);}
   if(r->method==HTTP_POST && uri=="/api/benchmark") {Engine::Command c;c.action=Engine::Action::Benchmark;return Engine::submit(c)?reply(r,"{}","202 Accepted"):reply(r,"{\"error\":\"Camera busy\"}","409 Conflict");}
   if(r->method==HTTP_GET&&(uri=="/api/preview"||uri=="/api/snapshot"))return cameraFrame(r,controlFrame,uri=="/api/snapshot");
-  if(r->method==HTTP_GET&&uri=="/api/cloud"){StaticJsonDocument<1024>d;Cloud::status(d.to<JsonObject>());return json(r,d);}
+  if(r->method==HTTP_GET&&uri=="/api/cloud"){StaticJsonDocument<2048>d;Cloud::status(d.to<JsonObject>());return json(r,d);}
   if(r->method==HTTP_POST&&uri=="/api/cloud/test"){String err;if(!Cloud::test(err)){StaticJsonDocument<256>d;d["error"]=err;String s;serializeJson(d,s);return reply(r,s.c_str(),"409 Conflict");}return reply(r,"{}","202 Accepted");}
   if(r->method==HTTP_POST&&uri=="/api/cloud"){if(r->content_len<=0||r->content_len>6144)return reply(r,"{\"error\":\"Cloud configuration is too large\"}","400 Bad Request");String input;input.reserve(r->content_len);char chunk[256];int remaining=r->content_len;while(remaining){int n=httpd_req_recv(r,chunk,min(remaining,255));if(n<=0)return ESP_FAIL;chunk[n]=0;input+=chunk;remaining-=n;}DynamicJsonDocument d(7168);String error;if(deserializeJson(d,input)||!Cloud::configure(d.as<JsonObject>(),error)){StaticJsonDocument<256>out;out["error"]=error.length()?error:"Invalid configuration";String s;serializeJson(out,s);return reply(r,s.c_str(),"400 Bad Request");}return reply(r,"{}","202 Accepted");}
   if(r->method==HTTP_POST&&uri=="/api/light/settings"){StaticJsonDocument<128>d;if(!body(r,d)||!d["preferred"].is<int>()||!d["auto_off"].is<int>()||d["preferred"].as<int>()<0||d["preferred"].as<int>()>100||d["auto_off"].as<int>()<10||d["auto_off"].as<int>()>300||!Light::configure(d["preferred"],d["auto_off"]))return reply(r,"{\"error\":\"Invalid light settings\"}","400 Bad Request");return reply(r,"{}");}
@@ -101,7 +124,7 @@ static esp_err_t handler(httpd_req_t*r) {
     if(action=="record")c.action=Engine::Action::Start;else if(action=="stop")c.action=Engine::Action::Stop;else if(action=="photo")c.action=Engine::Action::Photo;else if(action=="restart")c.action=Engine::Action::Restart;
     else if(action=="light"&&d["brightness"].is<int>()&&d["brightness"].as<int>()>=0&&d["brightness"].as<int>()<=100){c.action=Engine::Action::Light;c.camera[0]=d["brightness"];}
     else if(action=="reset_camera")c.action=Engine::Action::ResetCamera;
-    else if(action=="factory_reset"&&String(d["confirmation"]|"")=="ERASE SETTINGS")c.action=Engine::Action::FactoryReset;
+    else if(action=="factory_reset"&&String(d["confirmation"]|"")=="ERASE SETTINGS"){String token;authorized(r,&token);if(!Auth::sensitive(token))return reply(r,"{\"error\":\"Confirm owner access before resetting settings\"}","403 Forbidden");c.action=Engine::Action::FactoryReset;}
     else if(action=="privacy"&&d["enabled"].is<bool>()){c.action=Engine::Action::Privacy;c.flag=d["enabled"];}else return reply(r,"{\"error\":\"Unknown action\"}","400 Bad Request");
     return Engine::submit(c)?reply(r,"{}","202 Accepted"):reply(r,"{\"error\":\"Camera busy; retry\"}","409 Conflict");
   }
@@ -124,20 +147,11 @@ static esp_err_t handler(httpd_req_t*r) {
   }
   if(r->method==HTTP_POST && uri=="/api/network") {
     if(Engine::occupied())return reply(r,"{\"error\":\"Stop recording before changing Wi-Fi\"}","409 Conflict");
-    StaticJsonDocument<1024>d;if(!body(r,d)||!d["hotspot"].is<bool>())return reply(r,"{\"error\":\"Invalid network settings\"}","400 Bad Request");
-    String ssid=d["ssid"]|"",pass=d["password"]|"";bool hotspot=d["hotspot"];
-    String apSsid=d["ap_ssid"]|"",apPass=d["ap_password"]|"";
-    bool firstSetup=!prefs.getBool("netReady",false);
-    if(apPass.isEmpty() && !firstSetup) apPass=prefs.getString("apPass","");
-    if(apSsid.isEmpty() || apSsid.length()>32 || apPass.length()<8 || apPass.length()>63 || apPass==SETUP_AP_PASSWORD)
-      return reply(r,"{\"error\":\"Choose a hotspot name (1–32 bytes) and your own hotspot password (8–63 characters)\"}","400 Bad Request");
-    if(!hotspot && (ssid.isEmpty()||ssid.length()>32||pass.length()>63||(pass.length()>0&&pass.length()<8)))return reply(r,"{\"error\":\"Check SSID and Wi-Fi password lengths\"}","400 Bad Request");
-    bool saved=prefs.putString("apSsid",apSsid)>0 && prefs.putString("apPass",apPass)>0;
-    if(!hotspot){saved=bool(prefs.putString("ssid",ssid))&&saved;prefs.putString("wifiPass",pass);saved=(prefs.getString("wifiPass","")==pass)&&saved;}
-    saved=prefs.putBool("hotspot",hotspot)&&saved;
-    if(!saved || !prefs.putBool("netReady",true))return reply(r,"{\"error\":\"Could not save network settings\"}","500 Internal Server Error");
-    esp_err_t result=reply(r,"{\"apply_delay_seconds\":2}");Network::changed();return result;
+    StaticJsonDocument<1024>d;if(!body(r,d))return reply(r,"{\"error\":\"Invalid network settings\"}","400 Bad Request");
+    String error;bool changed=false;if(!Network::configure(d.as<JsonObject>(),error,changed)){StaticJsonDocument<256>out;out["error"]=error;String result;serializeJson(out,result);return reply(r,result.c_str(),"400 Bad Request");}
+    esp_err_t result=reply(r,changed?"{\"apply_delay_seconds\":2}":"{\"apply_delay_seconds\":0}");if(changed)Network::changed();return result;
   }
+
   if(r->method==HTTP_POST&&(uri=="/api/camera"||uri=="/api/storage/snapshot")){
     Engine::Command c;c.action=uri=="/api/camera"?Engine::Action::Camera:Engine::Action::Photo;
     if(c.action==Engine::Action::Camera){StaticJsonDocument<768>d;if(!body(r,d))return reply(r,"{\"error\":\"Invalid settings\"}","400 Bad Request");int i=0;for(const char*k:{"size","quality","brightness","contrast","saturation","mirror","flip"}){if(!d[k].is<int>())return reply(r,"{\"error\":\"Missing camera setting\"}","400 Bad Request");c.camera[i++]=d[k];}c.camera[7]=d["white_balance"]|prefs.getInt("wb",0);c.camera[8]=d["exposure"]|prefs.getInt("exposure",-1);c.camera[9]=d["gain"]|prefs.getInt("gain",-1);}

@@ -2,6 +2,6 @@
   "name": "robetix-vision-remote",
   "private": true,
   "type": "module",
-  "scripts": {"test": "node --test test/*.test.mjs"},
+  "scripts": {"test": "node --test test/*.test.mjs", "build": "node tools/embed-translations.mjs"},
   "engines": {"node": ">=22"}
 }

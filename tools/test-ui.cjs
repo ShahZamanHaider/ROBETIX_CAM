@@ -5,8 +5,8 @@ const html=require('./ui-source.cjs').loadUI();
 new Function(html.match(/<script>([\s\S]*?)<\/script>/)[1]);
 const options={quality_mode:1,recording_mode:0,name:'Front Door',recording_quality:1,recording_fps:5,preview_fps:5,clip_seconds:60,reserve_mb:64,cleanup:false,privacy:false,motion:false,motion_photo:true,motion_record:false,sensitivity:1,min_motion_seconds:2,cooldown_seconds:30,motion_seconds:15};
 const status={uptime:120,heap:170000,min_heap:150000,psram:4194304,free_psram:3400000,ip:'192.168.1.10',ap_ip:'192.168.4.1',connected:true,rssi:-50,reconnects:1,hotspot:true,needs_network_setup:false,ap_ssid:'My Camera',ssid:'Home Wi-Fi',benchmark:false,camera:{ready:true,pid:38,error:'',size:8,quality:18,brightness:0,contrast:0,saturation:0,mirror:0,flip:0,capture_ms:55,captured:10,failures:0},storage:{available:true,total:8*1024**3,used:1024**3,free:7*1024**3,error:''},app:{recording:false,phase:'idle',elapsed:0,frames:0,write_ms:0,record_errors:0,preview_drops:0,privacy:false,message:'',message_id:0,last_video:'',clock_set:true,options}};
-let authenticated=false,setup=true,calls=[],frameId=0,stall=false,deleted=false,testFailure=false;
-const cloudFixture={state:'not_configured',configured:false,message:'Pair with a service',whatsapp:false,remote:false};
+let authenticated=false,setup=false,calls=[],frameId=0,stall=false,deleted=false,testFailure=false;
+const cloudFixture={default_service_url:'https://robetixvision-previewtest-robetix-s-projects.vercel.app',state:'not_configured',configured:false,message:'',whatsapp:false,remote:false};
 const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jY1sAAAAASUVORK5CYII=','base64');
 function message(s){status.app.message=s;status.app.message_id++}
 const server=http.createServer((req,res)=>{
@@ -40,9 +40,9 @@ const server=http.createServer((req,res)=>{
 });
 (async()=>{
  await new Promise(r=>server.listen(0,'127.0.0.1',r));
- const browser=await chromium.launch({channel:'msedge',headless:true});const page=await browser.newPage({viewport:{width:1440,height:1000}});const errors=[],dialogs=[];page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>{dialogs.push(d.message());return d.accept()});
+ const browser=await chromium.launch({channel:process.env.ROBETIX_BROWSER_CHANNEL||'msedge',headless:true});const page=await browser.newPage({viewport:{width:1440,height:1000}});const errors=[],dialogs=[];page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>{dialogs.push(d.message());return d.accept()});
  try{
-  await page.goto('http://127.0.0.1:'+server.address().port);await page.locator('#setupHelp').waitFor({state:'visible'});
+  await page.goto('http://127.0.0.1:'+server.address().port);await page.locator('#loginForm').waitFor({state:'visible'});
   await page.locator('#password').fill('test-password-123');await page.locator('#loginForm button').click();
   await page.waitForFunction(()=>document.querySelector('#connectionText').textContent==='Connected');
   await page.locator('#feed').waitFor({state:'visible'});
@@ -56,9 +56,9 @@ const server=http.createServer((req,res)=>{
   await page.locator('nav [data-page=saved]').click();await page.waitForFunction(()=>document.querySelector('#files').textContent.includes('Video 1'));
   assert((await page.locator('#files a').getAttribute('href')).includes(':81/file?kind=videos'));
   await page.locator('#files button').click();await page.locator('#i18nConfirm').click();await page.waitForFunction(()=>document.querySelector('#files').textContent==='No videos saved yet.');
-  await page.locator('nav [data-page=settings]').click();await page.waitForFunction(()=>document.querySelector('#name').value==='Front Door');await page.locator('#name').fill('Garden');await page.locator('#pictureForm button').click();
+  await page.locator('nav [data-page=settings]').click();await page.waitForFunction(expected=>new URL(document.querySelector('#simplePairSite').href).origin===expected,cloudFixture.default_service_url);await page.waitForFunction(()=>document.querySelector('#name').value==='Front Door');await page.locator('#name').fill('Garden');await page.locator('#pictureForm button').click();
   await page.waitForFunction(()=>document.querySelector('#notice').textContent.includes('Applying picture'));assert(calls.some(c=>c.url==='/api/options'&&c.body.name==='Garden'));assert.equal(await page.locator('#settingsPreviewDock #feed').count(),1);
-  await page.locator('#hotspot').selectOption('false');assert(await page.locator('#routerFields').isVisible());await page.locator('#scan').click();
+  await page.locator('#hotspot').selectOption('false');await page.locator('#routerFields').waitFor({state:'visible'});await page.locator('#scan').click();
   await page.waitForFunction(()=>document.querySelector('#networks').children.length===1);assert.equal(await page.locator('#networks script').count(),0);
   await page.setViewportSize({width:390,height:844});await page.locator('nav [data-page=home]').click();await page.locator('#feed').waitFor({state:'visible'});
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Mobile overflow');

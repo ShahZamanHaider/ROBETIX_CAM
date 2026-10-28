@@ -1,0 +1,3 @@
+
+certs/*.pem text eol=lf
+certs/*.sha256 text eol=lf

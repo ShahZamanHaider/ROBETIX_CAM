@@ -2,6 +2,10 @@
 
 Standalone CCTV firmware for the original AI Thinker ESP32-CAM, native-JPEG camera and microSD. The camera serves its own phone-friendly application. Essential local operation needs no cloud service or continuously running computer.
 
+Remote live viewing/setup activation and verification: [docs/REMOTE_LIVE.md](docs/REMOTE_LIVE.md). The new relay and migration require explicit deployment; public hardware viewing is not yet verified.
+
+Current authentication upgrade: [remote/AUTHENTICATION.md](remote/AUTHENTICATION.md). Development/release workflow: [docs/DEVELOPMENT_WORKFLOW.md](docs/DEVELOPMENT_WORKFLOW.md). These extend the existing deployed service and Supabase account; no application database migration or recreation is required for authentication.
+
 This is a software-tested development release. No ESP32 serial device was available during this upgrade; camera/card behavior, detection accuracy, sustained FPS, electrical limits and overnight stability have **not** been verified on hardware. See [VALIDATION.md](VALIDATION.md) for the actual evidence and test sequence.
 
 ## Build, flash, connect
@@ -16,7 +20,7 @@ Pinned environment: PlatformIO Espressif32 **6.11.0**, Arduino-ESP32 **2.0.17**,
 
 Replace COMx with the actual serial port. If your adapter requires it, hold GPIO0 low during upload reset; release it and reset for normal use. Power off before reseating a camera ribbon or card. Use a stable regulated 5 V supply and short cable. Brownout protection remains enabled.
 
-First use: join **Robetix-Setup**, password **RobetixSetup**, open **http://192.168.4.1**, create your own 12–64-character administrator password, then select AP or STA and set your Wi-Fi credentials through the web page. STA joins a 2.4 GHz router while retaining the configured recovery hotspot. `http://robetix.local` works where mDNS is supported; use the actual IP otherwise. Existing provisioning is retained. Administrator and hotspot passwords are separate.
+First use: join the unique **ROBETIX-xxxxxx** Wi-Fi using the password printed on your private setup card (prototype/factory retrieval: `tools/setup-card.py COM_PORT` with PlatformIO Python and Node; saves a Windows DPAPI-encrypted `.private/*.dpapi` card, never a plaintext password note), open **http://192.168.4.1**, enter the private setup-card credential once and remember your trusted browser, then select AP or STA and set your Wi-Fi credentials through the web page. STA joins a 2.4 GHz router while retaining the configured recovery hotspot. `http://robetix.local` works where mDNS is supported; use the actual IP otherwise. Existing provisioning is retained. Existing administrator passwords remain supported; fresh setup does not require an extra chosen password. See docs/PERMANENT_SITE.md for access and recovery.
 
 ## Current functionality
 
@@ -84,9 +88,9 @@ Browser time or optional NTP supplies the clock. Offline boot without sync uses 
 
 Remembered local sessions store hashes of random device tokens, not the administrator password in browser storage. Up to four slots; remembered cookie one-year browser lifetime and device validity until sign-out/replacement/factory reset. Nonremembered sessions last at most 12 hours and end on device reboot. Local HTTP is unencrypted and must not be port-forwarded publicly. Media/admin routes remain authenticated; mutations require JSON.
 
-[remote/README.md](remote/README.md) explains what Supabase is, account creation, a new Vercel project, exact deployment variables, service-root certificate provisioning, pairing, Meta templates/webhooks, costs and `vision.robetix.com` DNS. Do not modify the main site/portfolio. The cloud client verifies HTTPS using the supplied trusted root and requires a valid clock. It never stores Meta credentials, uses bounded uploads/timeouts/retries, skips on low internal heap and does not block capture with network requests. Internet outage only affects optional features.
+[remote/README.md](remote/README.md) explains what Supabase is, account creation, a new Vercel project, exact deployment variables, legacy advanced certificate override, pairing, Meta templates/webhooks, costs and `vision.robetix.com` DNS. Do not modify the main site/portfolio. The cloud client verifies HTTPS using the built-in public trust bundle (or an advanced supplied trusted root) and requires a valid clock. It never stores Meta credentials, uses bounded uploads/timeouts/retries, skips on low internal heap and does not block capture with network requests. Internet outage only affects optional features.
 
-No actual cloud/account deployment, SQL execution, WhatsApp delivery or worldwide access was verified. Remote live video, remote camera commands, MFA UI and production security/availability certification are deferred. Browser alarms cannot force a locked phone or a WhatsApp notification to ring continuously.
+The user has deployed the existing service at `https://vision.robetix.com` and installed the Supabase schema/recipient migration. Read-only checks confirmed health version 2 at the starting commit, rejected unauthenticated camera listing, signup disabled, email enabled and existing tables. Real WhatsApp delivery and physical camera-to-cloud operation remain unverified here. Remote live video is implemented and tested with a simulated camera; physical performance still requires validation. Remote camera commands, MFA UI and production security/availability certification remain deferred. Browser alarms cannot force a locked phone or a WhatsApp notification to ring continuously.
 
 ## Evidence, preservation and remaining work
 

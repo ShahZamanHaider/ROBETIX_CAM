@@ -1,5 +1,22 @@
 # Files changed in the professional upgrade
 
+## Authentication, release workflow and Wi-Fi help
+
+Checkpoint `checkpoint/pre-auth-workflow` (`8cf4a78`); branch `feat/auth-recovery-sessions`. No application SQL migration, account recreation, new runtime npm dependency, Meta credential change or network/capture C++ change.
+
+- `remote/api/auth.mjs` (new), `remote/lib/session.mjs` (new): existing-user recovery, verified default/token-hash email callbacks, separate recovery cookies, encrypted remembered sessions, refresh, CSRF, logout and abuse controls.
+- `remote/lib/service.mjs`, `remote/api/account.mjs`, `remote/api/recipients.mjs`: cookie authorization/CSRF plus existing ownership checks and explicit bearer compatibility.
+- `remote/public/auth.js` (new), `remote/public/index.html`, `remote/public/app.css`, `remote/public/app.js`, `remote/public/recipients.js`: welcome/loading/login/recovery/reset, startup restore, private-data clearing, multi-tab synchronization and preserved camera/recipient screens.
+- `remote/public/auth-ur.json` (new), `remote/public/i18n.js`, `remote/tools/embed-translations.mjs` (new), `tools/embed_ui.py`, `tools/ui-source.cjs`: remote-only auth translations, generated bundle and separate firmware/remote generation.
+- `remote/api/health.mjs`, `remote/vercel.json`, `remote/package.json`, `remote/.env.example`: release version/commit diagnostics, reset route, build script and safe optional canonical-origin example.
+- `data/index.html`, `data/ur.json`, `src/Ui.h`: corrected bilingual STA/router/hotspot guidance. Optional firmware upload updates this local copy; cloud authentication does not depend on it.
+- `remote/test/auth.test.mjs` (new), `tools/test-auth-ui.mjs` (new): auth/recovery/session/security suites and actual browser-cookie tests with mocked Supabase.
+- `tools/mock-auth.cjs` (new), `tools/test-remote-ui.cjs`, `tools/test-recipients-ui.cjs`, `tools/test-ui.cjs`, `tools/test-alarm-browser.cjs`, `tools/test-i18n.cjs`: existing regression integration, portable browser channel and bilingual checks.
+- `tools/check-secrets.mjs` (new), `tools/check-deployment.mjs` (new), `.github/workflows/remote-checks.yml` (new), `.github/workflows/firmware-checks.yml` (new): credential-safe checks, read-only deployment inspection and CI.
+- `remote/AUTHENTICATION.md` (new), `docs/DEVELOPMENT_WORKFLOW.md` (new), `README.md`, `remote/README.md`, `docs/CHANGES.md`: current infrastructure, recovery settings, session limits, workflow, remaining verification and Wi-Fi troubleshooting.
+
+The user's uncommitted credentials were preserved in ignored `remote/.env.local`; that file is deliberately absent from this inventory of committed source.
+
 ## Dynamic WhatsApp recipients follow-up
 
 Compared with `checkpoint/pre-whatsapp-recipients` (`dcbf907`). No runtime npm/firmware dependency was added. The local PostgreSQL/WASM test uses the ignored development-only `.pio/sql-test` PGlite installation.

@@ -1,0 +1,62 @@
+name: Remote dashboard checks
+on:
+  push:
+    branches: ['**']
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: remote-checks-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - run: node tools/check-secrets.mjs --history
+      - run: npm --prefix remote run build
+      - run: git diff --exit-code -- remote/public/i18n.js
+      - run: npm --prefix remote test
+      - run: node tools/test-i18n.cjs
+      - run: npm install --prefix .pio/sql-test @electric-sql/pglite@0.5.12 --no-audit --no-fund
+      - run: node tools/test-recipients-sql.mjs
+      - run: node tools/test-camera-setup-sql.mjs
+      - run: node tools/test-migration-safety.mjs
+      - run: node tools/test-backup-encryption.mjs
+  browser:
+    runs-on: ubuntu-latest
+    env:
+      ROBETIX_BROWSER_CHANNEL: chromium
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - run: npm install --prefix .pio/ui-test playwright@1.64.1 --no-audit --no-fund
+      - run: .pio/ui-test/node_modules/.bin/playwright install --with-deps chromium
+      - run: node tools/test-auth-ui.mjs
+      - run: node tools/test-live-ui.mjs
+      - run: node tools/test-remote-ui.cjs
+      - run: node tools/test-recipients-ui.cjs
+      - run: node tools/test-ui.cjs
+      - run: node tools/test-setup-ui.cjs
+      - run: node tools/test-local-trust.cjs
+      - run: node tools/test-remote-setup.cjs
+
+  relay:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - run: npm ci --prefix relay --no-audit --no-fund
+      - run: npm test --prefix relay
+      - run: npm --prefix relay run check
+        env:
+          WRANGLER_SEND_METRICS: 'false'

@@ -1,19 +1,21 @@
 import {randomBytes} from 'node:crypto';
 import {wrap,reply,json,fail,env,fetchBounded,owner,db,rate,hash,storage,prune} from '../lib/service.mjs';
+import {liveConfigured,stopLive} from '../lib/live.mjs';
 export const config={api:{bodyParser:false}};
 export default wrap(async(req,res)=>{
  const action=req.query?.action||new URL(req.url,'https://account.invalid').searchParams.get('action');
  if(action==='login'){
  if(req.method!=='POST')fail(405,'POST required');await rate('login:'+req.headers['x-forwarded-for'],10,600);const v=await json(req);if(typeof v.email!=='string'||v.email.length>254||typeof v.password!=='string'||v.password.length>256)fail(400,'Invalid login');const r=await fetchBounded(env('SUPABASE_URL')+'/auth/v1/token?grant_type=password',{method:'POST',headers:{apikey:env('SUPABASE_ANON_KEY'),'Content-Type':'application/json'},body:JSON.stringify({email:v.email,password:v.password})},16384);if(!r.ok)fail(401,'Check your account credentials');const data=r.json();return reply(res,200,{access_token:data.access_token,expires_in:data.expires_in});
  }
- const uid=await owner(req);await rate('owner:'+uid,120,60);
+ const uid=await owner(req,res);await rate('owner:'+uid,120,60);
  if(action==='pair'){
  if(req.method!=='POST')fail(405,'POST required');await rate('pair-owner:'+uid,5,600);const code=randomBytes(5).toString('hex').toUpperCase();await db('rv_pair_codes?owner=eq.'+uid,{method:'DELETE'});await db('rv_pair_codes',{method:'POST',data:{owner:uid,code_hash:hash(code),expires:new Date(Date.now()+300000).toISOString()}});return reply(res,200,{code,expires_in:300});
  }
- const devices=await db('rv_devices?owner=eq.'+uid+'&select=id,name,enabled,last_seen,config');
- if(action==='devices'&&req.method==='GET')return reply(res,200,{devices:devices.map(d=>({id:d.id,name:d.name,enabled:d.enabled,remote:!!d.config.remote,last_seen:d.last_seen,online:!!d.enabled&&Date.now()-Date.parse(d.last_seen)<150000}))});
+ const devices=await db('rv_devices?owner=eq.'+uid+'&order=enabled.desc,last_seen.desc.nullslast&limit=50&select=*');
+ if(action==='devices'&&req.method==='GET')return reply(res,200,{capabilities:{setup:process.env.CAMERA_SETUP_ENABLED==='true',live:liveConfigured()},devices:devices.map(d=>({id:d.id,name:d.display_name||d.name,enabled:d.enabled,remote:!!d.config.remote,last_seen:d.last_seen,online:!!d.enabled&&Date.now()-Date.parse(d.last_seen)<150000}))});
  const id=req.query?.id||new URL(req.url,'https://account.invalid').searchParams.get('id'),d=devices.find(d=>d.id===id);if(!d)fail(404,'Camera not found');
- if(action==='revoke'&&req.method==='POST'){await db('rv_devices?id=eq.'+d.id,{method:'PATCH',data:{enabled:false,token_hash:hash(randomBytes(32))}});return reply(res,200,{revoked:true})}
+ if(action==='rename'&&req.method==='POST'){if(process.env.CAMERA_SETUP_ENABLED!=='true')fail(503,'Camera setup needs a service update');const v=await json(req);if(typeof v.name!=='string'||!v.name.trim()||Buffer.byteLength(v.name.trim())>48||/[\u0000-\u001f\u007f]/.test(v.name))fail(400,'Enter a shorter camera name');await db('rv_devices?id=eq.'+d.id,{method:'PATCH',data:{display_name:v.name.trim()}});return reply(res,200,{renamed:true})}
+ if(action==='revoke'&&req.method==='POST'){await db('rv_devices?id=eq.'+d.id,{method:'PATCH',data:{enabled:false,token_hash:hash(randomBytes(32))}});let live_stopped=true;try{await stopLive(d.id)}catch{live_stopped=false}return reply(res,200,{revoked:true,live_stopped})}
  if(!d.enabled||!d.config.remote)fail(403,'Remote photo access is disabled');
  if(action==='events'&&req.method==='GET'){await prune(d);const events=await db('rv_events?device=eq.'+d.id+'&order=created_at.desc&limit=12&select=id,created_at,epoch,offset_minutes,score,notification,photo');return reply(res,200,{events:events.map(e=>({...e,photo:!!e.photo}))})}
  if(action==='photo'&&req.method==='GET'){

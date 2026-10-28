@@ -1,0 +1,21 @@
+name: Firmware compile
+on:
+  push:
+    paths: ['src/**', 'data/**', 'platformio.ini', 'remote/service-origins.json', 'tools/embed_ui.py', 'tools/preview_firmware.py', 'tools/test-preview-config.py', '.github/workflows/firmware-checks.yml']
+  pull_request:
+    paths: ['src/**', 'data/**', 'platformio.ini', 'remote/service-origins.json', 'tools/embed_ui.py', 'tools/preview_firmware.py', 'tools/test-preview-config.py', '.github/workflows/firmware-checks.yml']
+permissions:
+  contents: read
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: pip install platformio==6.2.0
+      - run: python tools/test-preview-config.py
+      - run: g++ -std=c++17 tools/test_network.cpp -o /tmp/rv-network && /tmp/rv-network
+      - run: g++ -std=c++17 tools/test_setup_policy.cpp -o /tmp/rv-setup && /tmp/rv-setup
+      - run: pio run
