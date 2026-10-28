@@ -44,6 +44,8 @@ jobs:
       - run: node tools/test-remote-ui.cjs
       - run: node tools/test-recipients-ui.cjs
       - run: node tools/test-ui.cjs
+      - run: node tools/test-setup-ui.cjs
+      - run: node tools/test-remote-setup.cjs
 
   relay:
     runs-on: ubuntu-latest

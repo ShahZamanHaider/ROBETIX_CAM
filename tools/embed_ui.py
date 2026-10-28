@@ -3,7 +3,7 @@ import json
 Import("env")
 root = Path(env.subst("$PROJECT_DIR"))
 html = (root / "data/index.html").read_text(encoding="utf-8")
-for asset in ["i18n.js","alarm.js"]:
+for asset in ["i18n.js","alarm.js","setup.js"]:
     raw = (root / "data" / asset).read_text(encoding="utf-8-sig")
     source = raw
     source = source.replace("/* @translations */", json.dumps(json.loads((root / "data/ur.json").read_text(encoding="utf-8")), ensure_ascii=False, separators=(",", ":")))

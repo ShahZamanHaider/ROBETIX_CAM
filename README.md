@@ -20,7 +20,7 @@ Pinned environment: PlatformIO Espressif32 **6.11.0**, Arduino-ESP32 **2.0.17**,
 
 Replace COMx with the actual serial port. If your adapter requires it, hold GPIO0 low during upload reset; release it and reset for normal use. Power off before reseating a camera ribbon or card. Use a stable regulated 5 V supply and short cable. Brownout protection remains enabled.
 
-First use: join the unique **ROBETIX-xxxxxx** Wi-Fi using the password printed on your private setup card (prototype/factory retrieval: `tools/setup-card.py COM_PORT` with PlatformIO Python), open **http://192.168.4.1**, create your own 12–64-character administrator password, then select AP or STA and set your Wi-Fi credentials through the web page. STA joins a 2.4 GHz router while retaining the configured recovery hotspot. `http://robetix.local` works where mDNS is supported; use the actual IP otherwise. Existing provisioning is retained. Administrator and hotspot passwords are separate.
+First use: join the unique **ROBETIX-xxxxxx** Wi-Fi using the password printed on your private setup card (prototype/factory retrieval: `tools/setup-card.py COM_PORT` with PlatformIO Python and Node; saves a Windows DPAPI-encrypted `.private/*.dpapi` card, never a plaintext password note), open **http://192.168.4.1**, create your own 12–64-character administrator password, then select AP or STA and set your Wi-Fi credentials through the web page. STA joins a 2.4 GHz router while retaining the configured recovery hotspot. `http://robetix.local` works where mDNS is supported; use the actual IP otherwise. Existing provisioning is retained. Administrator and hotspot passwords are separate.
 
 ## Current functionality
 

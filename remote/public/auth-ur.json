@@ -94,5 +94,13 @@
   "Remote viewing is off on this camera": "اس کیمرے پر دور سے دیکھنا بند ہے",
   "Camera setup needs a service update": "کیمرے کے سیٹ اپ کے لیے سروس کی اپ ڈیٹ ضروری ہے",
   "Enter a camera name of 1–48 characters": "کیمرے کا نام ۱ سے ۴۸ حروف میں لکھیں",
-  "Live session could not be stopped. It will expire shortly.": "لائیو رابطہ بند نہیں ہو سکا۔ یہ جلد خود ختم ہو جائے گا۔"
+  "Live session could not be stopped. It will expire shortly.": "لائیو رابطہ بند نہیں ہو سکا۔ یہ جلد خود ختم ہو جائے گا۔",
+  "Waiting for your camera to connect…": "کیمرے کے جڑنے کا انتظار ہے…",
+  "Your camera is connected. Choose a name you will recognize.": "کیمرہ جڑ گیا ہے۔ ایسا نام رکھیں جو آسانی سے پہچان سکیں۔",
+  "Camera connected. Continue to name it.": "کیمرہ جڑ گیا۔ نام رکھنے کے لیے آگے جائیں۔",
+  "Pairing code expired. Close this setup and add the camera again.": "کوڈ کی مدت ختم ہو گئی۔ سیٹ اپ بند کر کے کیمرہ دوبارہ شامل کریں۔",
+  "Enter a shorter camera name": "کیمرے کا نام تھوڑا چھوٹا رکھیں",
+  "This camera already belongs to an account. Disconnect it there first.": "یہ کیمرہ پہلے سے ایک اکاؤنٹ کے ساتھ جڑا ہے۔ پہلے وہاں سے اسے الگ کریں۔",
+  "Your account has reached its camera limit.": "آپ کے اکاؤنٹ میں کیمروں کی حد پوری ہو گئی ہے۔",
+  "Camera pairing could not be completed. Please try again.": "کیمرہ جوڑا نہیں جا سکا۔ دوبارہ کوشش کریں۔"
 }
