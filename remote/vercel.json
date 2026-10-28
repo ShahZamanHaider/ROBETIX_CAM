@@ -1,7 +1,8 @@
 {
   "functions": {
     "api/*.mjs": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "includeFiles": "service-origins.json"
     }
   },
   "crons": [
@@ -37,6 +38,23 @@
     {
       "destination": "/index.html",
       "source": "/reset-password"
+    },
+    {
+      "source": "/auth/callback",
+      "destination": "/index.html"
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "robetixvision.vercel.app"
+        }
+      ],
+      "destination": "https://vision.robetix.com/:path*",
+      "permanent": true
     }
   ]
 }

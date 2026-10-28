@@ -8,7 +8,7 @@ No Vercel bypass credential is compiled, stored in NVS or sent by the camera. Th
 
 ## Build configuration
 
-Normal builds still default to `esp32cam`, which uses `https://robetixvision.vercel.app`. The separate `esp32cam_preview` environment uses ignored `.pio/preview-access.json`. The pre-build script accepts exactly these public fields; no cookies/tokens/query parameters are permitted:
+Normal builds still default to `esp32cam`, which uses `https://vision.robetix.com`. The separate `esp32cam_preview` environment uses ignored `.pio/preview-access.json`. The pre-build script accepts exactly these public fields; no cookies/tokens/query parameters are permitted:
 
 ```json
 {
@@ -31,7 +31,7 @@ The prepared binary is `.pio/build/esp32cam_preview/firmware.bin`. Flash only af
 
 ## Guided physical setup sequence
 
-The assistant will walk through these one step per reply: identify/connect the USB programmer; detect its serial port; enter upload mode if required by that adapter; upload the prepared Preview environment; return to normal boot; connect to the camera's existing Wi-Fi/setup card; sign in locally and choose router STA mode; open the pinned Preview and sign in; generate Add Camera code; enter it under local Settings → Connect to my account; check sensor/PSRAM/connection status; open Watch Live on a phone using mobile data. Do not enter Meta/Supabase/Vercel credentials on the camera.
+The assistant will walk through these one step per reply: identify/connect the USB programmer; detect its serial port; enter upload mode if required by that adapter; upload the prepared Preview environment; return to normal boot; connect to the camera's existing Wi-Fi/setup card; use trusted local access and choose router STA mode; open the pinned Preview and sign in; generate Add Camera code; enter it under local Settings → Connect to my account; check sensor/PSRAM/connection status; open Watch Live on a phone using mobile data. Do not enter Meta/Supabase/Vercel credentials on the camera.
 
 Simple pairing uses this build's origin. Existing valid device credentials are retained when a firmware update moves between recognized Robetix Preview/Production origins; unrelated custom services are left unchanged. A fresh code is required for an unpaired camera or an explicitly requested new pairing. Existing camera, network, recording, motion and SD preferences remain stored. If an existing cloud ownership claim blocks pairing, disconnect that camera in its current owner's dashboard first; do not delete users, reset the database or clear the factory namespace.
 

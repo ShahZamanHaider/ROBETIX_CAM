@@ -1,9 +1,9 @@
 name: Firmware compile
 on:
   push:
-    paths: ['src/**', 'data/**', 'platformio.ini', 'tools/embed_ui.py', 'tools/preview_firmware.py', 'tools/test-preview-config.py', '.github/workflows/firmware-checks.yml']
+    paths: ['src/**', 'data/**', 'platformio.ini', 'remote/service-origins.json', 'tools/embed_ui.py', 'tools/preview_firmware.py', 'tools/test-preview-config.py', '.github/workflows/firmware-checks.yml']
   pull_request:
-    paths: ['src/**', 'data/**', 'platformio.ini', 'tools/embed_ui.py', 'tools/preview_firmware.py', 'tools/test-preview-config.py', '.github/workflows/firmware-checks.yml']
+    paths: ['src/**', 'data/**', 'platformio.ini', 'remote/service-origins.json', 'tools/embed_ui.py', 'tools/preview_firmware.py', 'tools/test-preview-config.py', '.github/workflows/firmware-checks.yml']
 permissions:
   contents: read
 jobs:

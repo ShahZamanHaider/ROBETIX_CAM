@@ -762,5 +762,19 @@
   "pair failed": "کیمرہ نہیں جڑ سکا",
   "Close": "بند کریں",
   "Camera paired, but live service is not ready. Check the camera website.": "کیمرا اکاؤنٹ سے جڑ گیا ہے، لیکن لائیو ویڈیو کی سروس تیار نہیں۔ کیمرے کی ویب سائٹ چیک کریں۔",
-  "service update": "سروس کی اپ ڈیٹ"
+  "service update": "سروس کی اپ ڈیٹ",
+  "Setup-card code": "سیٹ اپ کارڈ کا کوڈ",
+  "Use the private camera Wi-Fi password printed on your setup card. You only need this once on a trusted device.": "سیٹ اپ کارڈ پر لکھا کیمرے کے وائی فائی کا نجی پاس ورڈ درج کریں۔ اپنے قابل اعتماد فون پر یہ صرف پہلی بار درکار ہے۔",
+  "Set up this camera": "اس کیمرے کو سیٹ اپ کریں",
+  "Connect this device without a password": "اس فون کو پاس ورڈ کے بغیر جوڑیں",
+  "Use your USB base to request a one-time code with TRUST_DEVICE. Your password and saved settings stay as they are.": "USB بیس سے TRUST_DEVICE کمانڈ کے ذریعے ایک بار استعمال ہونے والا کوڈ لیں۔ آپ کا پاس ورڈ اور محفوظ سیٹنگز برقرار رہیں گی۔",
+  "One-time USB code": "ایک بار استعمال ہونے والا USB کوڈ",
+  "Join the camera Wi-Fi and enter the private setup-card code": "کیمرے کے وائی فائی سے جڑیں اور نجی سیٹ اپ کارڈ کا کوڈ درج کریں",
+  "Use your camera password or a fresh USB recovery code": "کیمرے کا پاس ورڈ یا نیا USB ریکوری کوڈ درج کریں",
+  "Confirm owner access before resetting settings": "سیٹنگز ری سیٹ کرنے سے پہلے مالک کی رسائی کی تصدیق کریں",
+  "Enter your camera password or a fresh USB recovery code": "کیمرے کا پاس ورڈ یا نیا USB ریکوری کوڈ درج کریں",
+  "Live video is available when the camera and phone have Internet access and the live service is ready.": "جب کیمرہ اور فون انٹرنیٹ سے جڑے ہوں اور لائیو سروس تیار ہو تو لائیو ویڈیو دستیاب ہے.",
+  "Remote monitoring shows last seen, motion history and private snapshots. Live video is available when the camera and phone have Internet access and the live service is ready. Turning Off stops future uploads; use Disconnect in the remote app to revoke access there. Already downloaded pictures cannot be recalled.": "ریموٹ نگرانی میں کیمرے کی آخری رابطے کی حالت، حرکت کی ہسٹری اور نجی تصاویر دیکھی جا سکتی ہیں۔ کیمرہ اور فون انٹرنیٹ سے جڑے ہوں اور سروس تیار ہو تو لائیو ویڈیو بھی دستیاب ہے۔ بند کرنے سے نئی اپ لوڈز رک جاتی ہیں؛ رسائی ختم کرنے کے لیے آن لائن ایپ میں کیمرہ منقطع کریں۔ پہلے سے ڈاؤن لوڈ کی گئی تصاویر واپس نہیں لی جا سکتیں۔",
+  "Local access link expired. Open the camera from your trusted page again.": "مقامی رسائی کا لنک ختم ہو گیا ہے۔ اپنے قابل اعتماد صفحے سے کیمرہ دوبارہ کھولیں۔",
+  "Connect to home Wi-Fi first": "پہلے گھر کے وائی فائی سے جڑیں"
 }

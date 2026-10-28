@@ -6,7 +6,8 @@ import html,json,sys,time
 from pathlib import Path
 import serial
 if len(sys.argv)!=2:raise SystemExit('Usage: python tools/setup-card.py COM_PORT')
-with serial.Serial(sys.argv[1],115200,timeout=1) as port:
+connection=serial.Serial();connection.port=sys.argv[1];connection.baudrate=115200;connection.timeout=1;connection.dtr=False;connection.rts=False
+with connection as port:
     deadline=time.monotonic()+30
     while time.monotonic()<deadline:
         port.write(b'SETUP_CARD\n')

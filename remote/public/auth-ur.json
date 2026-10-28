@@ -102,5 +102,21 @@
   "Enter a shorter camera name": "کیمرے کا نام تھوڑا چھوٹا رکھیں",
   "This camera already belongs to an account. Disconnect it there first.": "یہ کیمرہ پہلے سے ایک اکاؤنٹ کے ساتھ جڑا ہے۔ پہلے وہاں سے اسے الگ کریں۔",
   "Your account has reached its camera limit.": "آپ کے اکاؤنٹ میں کیمروں کی حد پوری ہو گئی ہے۔",
-  "Camera pairing could not be completed. Please try again.": "کیمرہ جوڑا نہیں جا سکا۔ دوبارہ کوشش کریں۔"
+  "Camera pairing could not be completed. Please try again.": "کیمرہ جوڑا نہیں جا سکا۔ دوبارہ کوشش کریں۔",
+  "Sign in once. Your cameras will be ready next time.": "ایک بار سائن اِن کریں۔ اگلی بار آپ کے کیمرے فوراً کھل جائیں گے۔",
+  "Email me a sign-in link": "ای میل پر سائن اِن لنک بھیجیں",
+  "Use a password instead": "پاس ورڈ سے سائن اِن کریں",
+  "Open your cameras": "اپنے کیمرے کھولیں",
+  "Continue to sign in securely on this device.": "اس فون پر محفوظ طریقے سے سائن اِن کرنے کے لیے آگے بڑھیں۔",
+  "Continue to My Cameras": "میرے کیمروں پر جائیں",
+  "My Cameras": "میرے کیمرے",
+  "Request a new sign-in link": "نیا سائن اِن لنک منگوائیں",
+  "Account & trusted devices": "اکاؤنٹ اور قابل اعتماد ڈیوائسز",
+  "You stay signed in on devices you trust. Sign out everywhere if a device is lost.": "آپ اپنے قابل اعتماد فون پر سائن اِن رہتے ہیں۔ فون گم ہو جائے تو سب ڈیوائسز سے سائن آؤٹ کریں۔",
+  "Sign out on all devices": "سب ڈیوائسز سے سائن آؤٹ کریں",
+  "Sign out on every trusted device?": "کیا ہر قابل اعتماد ڈیوائس سے سائن آؤٹ کرنا ہے؟",
+  "Signed out on all devices": "سب ڈیوائسز سے سائن آؤٹ ہو گیا",
+  "If this email belongs to an existing account, a sign-in link will arrive. Open it in this browser within 10 minutes.": "اگر یہ ای میل پہلے سے موجود اکاؤنٹ کی ہے تو سائن اِن لنک آئے گا۔ اسے اسی براؤزر میں دس منٹ کے اندر کھولیں۔",
+  "This sign-in link expired or was opened in a different browser. Request a new link here.": "یہ سائن اِن لنک ختم ہو گیا ہے یا کسی اور براؤزر میں کھلا ہے۔ یہاں نیا لنک منگوائیں۔",
+  "On your phone, join the Wi-Fi printed on the camera setup card. Open http://192.168.4.1 and enter its private setup-card code.": "فون کو کیمرے کے سیٹ اپ کارڈ والے وائی فائی سے جوڑیں۔ http://192.168.4.1 کھولیں اور کارڈ کا نجی کوڈ درج کریں۔"
 }

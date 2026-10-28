@@ -1,6 +1,6 @@
 # Optional worldwide access and WhatsApp setup
 
-This folder is the existing Vercel/Supabase remote service. The user deployed it at `https://robetixvision.vercel.app` and applied the original schema and recipient migration. Read-only audit confirmed health, private API denial and existing tables; no real Meta notification or device end-to-end test was performed here. Local CCTV works with both cloud switches Off. New-install account instructions below apply only to genuinely new installations; **do not recreate the existing project or rerun the base schema for authentication changes**.
+This folder is the existing Vercel/Supabase remote service. The user deployed it at `https://vision.robetix.com` and applied the original schema and recipient migration. Read-only audit confirmed health, private API denial and existing tables; no real Meta notification or device end-to-end test was performed here. Local CCTV works with both cloud switches Off. New-install account instructions below apply only to genuinely new installations; **do not recreate the existing project or rerun the base schema for authentication changes**.
 
 For Forgot Password, remembered HttpOnly sessions and exact Supabase redirect settings, see [AUTHENTICATION.md](AUTHENTICATION.md). For branch/check/preview/promotion workflow, see [../docs/DEVELOPMENT_WORKFLOW.md](../docs/DEVELOPMENT_WORKFLOW.md). Authentication requires no SQL migration and no changes to existing privileged environment values. A code Preview is not an automatic production merge.
 
