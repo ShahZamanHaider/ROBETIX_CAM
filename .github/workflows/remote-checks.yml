@@ -41,6 +41,7 @@ jobs:
       - run: .pio/ui-test/node_modules/.bin/playwright install --with-deps chromium
       - run: node tools/test-auth-ui.mjs
       - run: node tools/test-live-ui.mjs
+      - run: node tools/test-camera-controls.mjs
       - run: node tools/test-remote-ui.cjs
       - run: node tools/test-recipients-ui.cjs
       - run: node tools/test-ui.cjs

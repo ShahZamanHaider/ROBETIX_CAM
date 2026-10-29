@@ -7,6 +7,7 @@
 #include "Events.h"
 #include "Cloud.h"
 #include "Live.h"
+#include "RemoteControl.h"
 #include "Light.h"
 #include "Maintenance.h"
 #include "Schedule.h"
@@ -20,7 +21,7 @@ static std::atomic<uint32_t> previewUntil{0};static std::atomic<bool> recording{
 static char phase[16]="idle",message[160]="",lastFile[40]="";static uint32_t messageId=0,recordFrames=0,sdWriteUs=0,recordErrors=0,previewDrops=0;static std::atomic<uint32_t> recordAt{0};
 static Recording recorder;static bool starting=false,cardOwned=false;static camera_status_t previous;static uint32_t nextFrameAt=0;
 static uint32_t nextMotionAt=0,nextAutoAt=0,motionEvent=0;static uint8_t recordOrigin=0;static bool bootOptions=true;
-static uint32_t nextRecordAt=0;
+static uint32_t nextRecordAt=0;static char pendingPhotoId[33]={},pendingStartId[33]={};
 static int remoteTier=-1;static bool idleLow=false;static camera_status_t viewingSettings;
 static const char*optionKeys[]={"name","clip_seconds","reserve_mb","cleanup","recording_quality","recording_fps","preview_fps","motion","motion_photo","motion_record","sensitivity","motion_seconds","min_motion_seconds","cooldown_seconds","quality_mode","recording_mode","zone_x","zone_y","zone_w","zone_h","retain_videos","retain_photos","video_days","photo_days","schedule","schedule_start","schedule_end","schedule_days","timezone_minutes","timelapse_seconds","motion_interval","motion_threshold","motion_cells","motion_neighbors","smaller_movements"};
 static AppOptions mergeOptions(const AppOptions&old,const AppOptions&v,uint64_t mask){AppOptions out=old;
@@ -46,7 +47,7 @@ static void encodeOptions(JsonObject o,const AppOptions&v){
 }
 String cameraName(){xSemaphoreTake(stateMutex,portMAX_DELAY);String name=opts.name;xSemaphoreGive(stateMutex);return name;}
 void options(JsonObject o){xSemaphoreTake(stateMutex,portMAX_DELAY);encodeOptions(o,opts);xSemaphoreGive(stateMutex);}
-bool configure(JsonObject o,String&err){
+bool configure(JsonObject o,String&err,const char*remoteId){
  xSemaphoreTake(stateMutex,portMAX_DELAY);AppOptions v=opts;xSemaphoreGive(stateMutex);
  if(o.containsKey("name")){if(!o["name"].is<const char*>()||strlen(o["name"])<1||strlen(o["name"])>48){err="Choose a camera name (1–48 bytes)";return false;}strlcpy(v.name,o["name"],sizeof(v.name));}
  #define INT_FIELD(key,field,lo,hi) if(o.containsKey(key)){if(!o[key].is<int>()||o[key].as<int>()<lo||o[key].as<int>()>hi){err="Invalid " key;return false;}v.field=o[key].as<int>();}
@@ -65,7 +66,7 @@ bool configure(JsonObject o,String&err){
  if(o.containsKey("motion_record")&&!o.containsKey("recording_mode"))v.recordingMode=v.motionRecord?2:0;
  v.motionRecord=v.recordingMode==2;
  if(v.timelapseSeconds&&(v.recordingMode==2||v.clipSeconds<v.timelapseSeconds*2)){err="Time-lapse needs a clip at least twice its interval and cannot use movement recording";return false;}
- Command c;c.action=Action::Options;c.options=v;c.mask=0;for(unsigned i=0;i<sizeof(optionKeys)/sizeof(*optionKeys);i++)if(o.containsKey(optionKeys[i]))c.mask|=1ULL<<i;
+ Command c;c.action=Action::Options;if(remoteId)strlcpy(c.remoteId,remoteId,sizeof(c.remoteId));c.options=v;c.mask=0;for(unsigned i=0;i<sizeof(optionKeys)/sizeof(*optionKeys);i++)if(o.containsKey(optionKeys[i]))c.mask|=1ULL<<i;
  if(o.containsKey("motion_record")||o.containsKey("recording_mode"))c.mask|=(1ULL<<9)|(1ULL<<15);
  if(!submit(c)){err="Camera busy; try again";return false;}return true;
 }
@@ -115,24 +116,24 @@ static void task(void*){
  bool photoPending=false;uint32_t consecutiveFailures=0;
  for(;;){
   Command c;
-  if(xQueueReceive(commands,&c,0)==pdTRUE){
-   if(c.action==Action::Start)startRecording();
-   else if(c.action==Action::Stop){stopRecording();if(opts.recordingMode){xSemaphoreTake(stateMutex,portMAX_DELAY);opts.recordingMode=0;opts.motionRecord=false;saveOptions();xSemaphoreGive(stateMutex);say("Video stopped. Automatic recording is now Off.");}}
-   else if(c.action==Action::Photo){if(privacy||Camera::busy()||!Camera::ready)say("Camera is unavailable");else photoPending=true;}
+  if(xQueueReceive(commands,&c,0)==pdTRUE){RemoteControl::Completion completed(c.remoteId);
+   if(c.action==Action::Start){bool already=recording;startRecording();if(!already&&recording){strlcpy(pendingStartId,c.remoteId,sizeof(pendingStartId));completed.defer();}}
+   else if(c.action==Action::Stop){uint32_t errors=recordErrors;stopRecording();completed.done(!recording&&recordErrors==errors,"Recording stopped and finalized");if(opts.recordingMode){xSemaphoreTake(stateMutex,portMAX_DELAY);opts.recordingMode=0;opts.motionRecord=false;saveOptions();xSemaphoreGive(stateMutex);say("Video stopped. Automatic recording is now Off.");}}
+   else if(c.action==Action::Photo){if(photoPending) say("A photo is already being saved");else if(privacy||Camera::busy()||!Camera::ready)say("Camera is unavailable");else{photoPending=true;strlcpy(pendingPhotoId,c.remoteId,sizeof(pendingPhotoId));completed.defer();}}
    else if(c.action==Action::Options){if(recording||Camera::busy())say("Stop recording or wait for the benchmark before changing settings");else {
     c.options=mergeOptions(opts,c.options,c.mask);if(c.options.zoneX+c.options.zoneW>1000||c.options.zoneY+c.options.zoneH>1000||(c.options.timelapseSeconds&&(c.options.recordingMode==2||c.options.clipSeconds<c.options.timelapseSeconds*2))){say("Settings conflict; check the motion area or time-lapse interval");continue;}
     bool nameChanged=!bootOptions&&strcmp(opts.name,c.options.name);bool profile=bootOptions||opts.qualityMode!=c.options.qualityMode;bootOptions=false;
     xSemaphoreTake(Camera::mutex,portMAX_DELAY);restoreIdle();xSemaphoreGive(Camera::mutex);
     xSemaphoreTake(stateMutex,portMAX_DELAY);c.options.privacy=privacy.load();opts=c.options;xSemaphoreGive(stateMutex);
     bool ok=true;if(profile&&!privacy){xSemaphoreTake(Camera::mutex,portMAX_DELAY);ok=applyProfile();xSemaphoreGive(Camera::mutex);clearFrame();}
-    xSemaphoreTake(stateMutex,portMAX_DELAY);ok=saveOptions()&&ok;xSemaphoreGive(stateMutex);if(nameChanged)Cloud::nameChanged();Maintenance::policy(opts);Motion::reset();nextMotionAt=millis();nextAutoAt=millis()+1000;say(ok?"Settings saved":"Settings saved, but camera adjustment failed");}}
-   else if(c.action==Action::Camera){if(recording||privacy||Camera::busy())say("Stop recording and resume the camera before changing picture settings");else{xSemaphoreTake(Camera::mutex,portMAX_DELAY);restoreIdle();bool ok=Camera::configure(c.camera[0],c.camera[1],c.camera[2],c.camera[3],c.camera[4],c.camera[5],c.camera[6],true);if(ok)ok=Camera::extras(c.camera[7],c.camera[8],c.camera[9],true);xSemaphoreGive(Camera::mutex);if(ok){xSemaphoreTake(stateMutex,portMAX_DELAY);opts.qualityMode=3;saveOptions();xSemaphoreGive(stateMutex);}Motion::reset();clearFrame();say(ok?"Picture settings saved":"Picture settings could not be applied");}}
+    xSemaphoreTake(stateMutex,portMAX_DELAY);ok=saveOptions()&&ok;xSemaphoreGive(stateMutex);if(nameChanged)Cloud::nameChanged();Maintenance::policy(opts);Motion::reset();nextMotionAt=millis();nextAutoAt=millis()+1000;say(ok?"Settings saved":"Settings saved, but camera adjustment failed");completed.done(ok,ok?"Settings saved":"Settings could not be applied");}}
+   else if(c.action==Action::Camera){if(recording||privacy||Camera::busy())say("Stop recording and resume the camera before changing picture settings");else{xSemaphoreTake(Camera::mutex,portMAX_DELAY);restoreIdle();bool ok=Camera::configure(c.camera[0],c.camera[1],c.camera[2],c.camera[3],c.camera[4],c.camera[5],c.camera[6],true);if(ok)ok=Camera::extras(c.camera[7],c.camera[8],c.camera[9],true);xSemaphoreGive(Camera::mutex);if(ok){xSemaphoreTake(stateMutex,portMAX_DELAY);opts.qualityMode=3;saveOptions();xSemaphoreGive(stateMutex);}Motion::reset();clearFrame();say(ok?"Picture settings saved":"Picture settings could not be applied");completed.done(ok,ok?"Picture settings saved":"Picture settings could not be applied");}}
    else if(c.action==Action::Benchmark){if(recording||privacy)say("Stop recording and resume the camera first");else if(!Camera::startBenchmark())say("Benchmark unavailable");}
-   else if(c.action==Action::Privacy){if(Camera::busy())say("Wait for the benchmark to finish");else{stopRecording();Light::set(0);xSemaphoreTake(Camera::mutex,portMAX_DELAY);restoreIdle();bool ok=Camera::pause(c.flag);if(ok&&!c.flag)applyProfile();xSemaphoreGive(Camera::mutex);privacy=c.flag;xSemaphoreTake(stateMutex,portMAX_DELAY);opts.privacy=c.flag;saveOptions();xSemaphoreGive(stateMutex);Motion::reset();clearFrame();say(!ok?"Camera resume failed; check the ribbon and power":c.flag?"Camera paused; recording and motion monitoring stopped":"Camera resumed");}}
-   else if(c.action==Action::Light){if(!privacy)Light::set(c.camera[0]);else say("Resume the camera to use the flashlight");}
+   else if(c.action==Action::Privacy){if(Camera::busy())say("Wait for the benchmark to finish");else{stopRecording();Light::set(0);xSemaphoreTake(Camera::mutex,portMAX_DELAY);restoreIdle();bool ok=Camera::pause(c.flag);if(ok&&!c.flag)applyProfile();xSemaphoreGive(Camera::mutex);privacy=c.flag;completed.done(ok,ok?(c.flag?"Camera paused":"Camera resumed"):"Camera resume failed");xSemaphoreTake(stateMutex,portMAX_DELAY);opts.privacy=c.flag;saveOptions();xSemaphoreGive(stateMutex);Motion::reset();clearFrame();say(!ok?"Camera resume failed; check the ribbon and power":c.flag?"Camera paused; recording and motion monitoring stopped":"Camera resumed");}}
+   else if(c.action==Action::Light){if(!privacy){Light::set(c.camera[0]);completed.done(Light::value()==c.camera[0],"Flashlight updated");}else say("Resume the camera to use the flashlight");}
    else if(c.action==Action::ResetCamera){if(recording||Camera::busy())say("Stop recording and wait for the camera first");else{xSemaphoreTake(Camera::mutex,portMAX_DELAY);restoreIdle();bool ok=Camera::pause(false)&&Camera::configure(psramFound()?FRAMESIZE_VGA:FRAMESIZE_QVGA,18,0,0,0,0,0,true)&&Camera::extras(0,-1,-1,true);xSemaphoreGive(Camera::mutex);Light::set(0);privacy=false;xSemaphoreTake(stateMutex,portMAX_DELAY);opts.qualityMode=1;opts.previewFps=5;opts.privacy=false;saveOptions();xSemaphoreGive(stateMutex);clearFrame();Motion::reset();say(ok?"Camera defaults restored. Wi-Fi and saved files kept.":"Camera reset failed. Check the sensor and power.");}}
    else if(c.action==Action::FactoryReset){Cloud::halt();stopRecording();Light::set(0);if(prefs.clear()){delay(500);ESP.restart();}else say("Could not clear settings");}
-   else if(c.action==Action::Restart){stopRecording();say("Restarting camera");delay(500);ESP.restart();}
+   else if(c.action==Action::Restart){stopRecording();say("Restarting camera");completed.done(true,"Camera restarting");completed.finish();delay(1500);ESP.restart();}
   }
   uint32_t previewDeadline=previewUntil.load();bool view=previewDeadline&&(int32_t)(previewDeadline-millis())>0;if(previewDeadline&&!view)previewUntil.compare_exchange_strong(previewDeadline,0);
   bool remoteView=Live::viewing(),remoteDue=Live::wanted();
@@ -146,16 +147,18 @@ static void task(void*){
   }
   bool motionDue=monitor&&(int32_t)(millis()-nextMotionAt)>=0;
   bool recordDue=recording&&(int32_t)(millis()-nextRecordAt)>=0;
+  if((privacy||!Camera::ready)&&*pendingPhotoId){RemoteControl::complete(pendingPhotoId,false,"Camera is unavailable");pendingPhotoId[0]=0;photoPending=false;}
   if(privacy||Camera::busy()||!Camera::ready||(!view&&!remoteDue&&!recordDue&&!photoPending&&!motionDue&&!Cloud::wantsTest())){if(recording&&millis()-recordAt>=opts.clipSeconds*1000UL){stopRecording();nextAutoAt=millis()+500;}delay(20);continue;}
   uint32_t now=millis();if((int32_t)(now-nextFrameAt)<0&&nextFrameAt-now<=1000){delay(5);continue;}nextFrameAt=now+1000/(recording?opts.recordingFps:opts.previewFps);
   if(xSemaphoreTake(Camera::mutex,pdMS_TO_TICKS(100))!=pdTRUE){delay(5);continue;}
   camera_fb_t*f=Camera::capture();
-  if(!f){xSemaphoreGive(Camera::mutex);if(++consecutiveFailures==3){photoPending=false;if(recording)stopRecording();say("Camera capture failed. Check power and camera connection.");}delay(500);continue;}consecutiveFailures=0;
+  if(!f){xSemaphoreGive(Camera::mutex);if(++consecutiveFailures==3){photoPending=false;RemoteControl::complete(pendingPhotoId,false,"Camera capture failed");pendingPhotoId[0]=0;RemoteControl::complete(pendingStartId,false,"Camera capture failed");pendingStartId[0]=0;if(recording)stopRecording();say("Camera capture failed. Check power and camera connection.");}delay(500);continue;}consecutiveFailures=0;
   if(view)publish(f);
   bool writeFailed=false;
   if(starting){starting=false;if(!recorder.start(f,epoch(),opts.recordingFps))writeFailed=true;else{recordAt=millis();if(recordOrigin==2&&motionEvent)Events::attach(motionEvent,recorder.name,cardOwned);setPhase("recording");say("Recording started");}}
   if(recording&&!writeFailed&&recordDue){nextRecordAt=millis()+(opts.timelapseSeconds?opts.timelapseSeconds*1000UL:1000/opts.recordingFps);writeFailed=!recorder.append(f);xSemaphoreTake(stateMutex,portMAX_DELAY);recordFrames=recorder.frames;sdWriteUs=recorder.writeUs;strlcpy(lastFile,recorder.name.c_str(),sizeof(lastFile));xSemaphoreGive(stateMutex);}
-  if(photoPending){photoPending=false;bool own=cardOwned||(Storage::available&&xSemaphoreTake(Storage::operationMutex,0)==pdTRUE);String name;bool ok=own&&Storage::reserve(f->len,opts.reserveMB,false)&&Storage::save(f,name,epoch());if(own&&!cardOwned)xSemaphoreGive(Storage::operationMutex);say(ok?"Photo saved":"Photo could not be saved. Check card space or downloads.");}
+  if(*pendingStartId){RemoteControl::complete(pendingStartId,!writeFailed&&recording,writeFailed?"Recording write failed":"Recording started",recorder.name.c_str());pendingStartId[0]=0;}
+  if(photoPending){photoPending=false;bool own=cardOwned||(Storage::available&&xSemaphoreTake(Storage::operationMutex,0)==pdTRUE);String name;bool ok=own&&Storage::reserve(f->len,opts.reserveMB,false)&&Storage::save(f,name,epoch());if(own&&!cardOwned)xSemaphoreGive(Storage::operationMutex);say(ok?"Photo saved":"Photo could not be saved. Check card space or downloads.");RemoteControl::complete(pendingPhotoId,ok,ok?"Photo saved":"Photo could not be saved",ok?name.c_str():nullptr);pendingPhotoId[0]=0;}
   bool movement=false;
   if(motionDue){nextMotionAt=millis()+opts.motionInterval;if(!recording||recorder.writeUs<50000)movement=Motion::analyze(f,opts);if(testingMotion||(!opts.motion&&opts.recordingMode!=2))movement=false;}
   if(movement){
@@ -174,7 +177,7 @@ static void task(void*){
 }
 bool begin(){
  stateMutex=xSemaphoreCreateMutex();frameMutex=xSemaphoreCreateMutex();commands=xQueueCreate(4,sizeof(Command));if(!stateMutex||!frameMutex||!commands)return false;
- Light::begin();Motion::begin();Events::begin();Maintenance::begin();Cloud::begin();
+ RemoteControl::begin();Light::begin();Motion::begin();Events::begin();Maintenance::begin();Cloud::begin();
  String saved=prefs.getString("appOptions","");if(saved.length()){StaticJsonDocument<2048>d;if(!deserializeJson(d,saved)){if(!d["motion_v2"].as<bool>()){d["cooldown_seconds"]=2;d["min_motion_seconds"]=1;}opts.privacy=d["privacy"]|false;privacy=opts.privacy;String err;configure(d.as<JsonObject>(),err);}}else{Command c;c.action=Action::Options;c.options=opts;submit(c);}
  if(privacy){xSemaphoreTake(Camera::mutex,portMAX_DELAY);Camera::pause(true);xSemaphoreGive(Camera::mutex);}
  capacity=psramFound()?192*1024:32*1024;frameBuffer=(uint8_t*)heap_caps_malloc(capacity,psramFound()?MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT:MALLOC_CAP_8BIT);

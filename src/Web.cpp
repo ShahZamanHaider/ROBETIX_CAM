@@ -1,4 +1,5 @@
 #include "Web.h"
+#include "DeviceStatus.h"
 #include "Settings.h"
 #include "Camera.h"
 #include "Network.h"
@@ -95,10 +96,7 @@ static esp_err_t handler(httpd_req_t*r) {
   if(r->method==HTTP_POST && uri=="/api/logout") {String token;authorized(r,&token);Auth::revoke(token);httpd_resp_set_hdr(r,"Set-Cookie","rv=; Path=/; Max-Age=0");return reply(r,"{}");}
   if(r->method==HTTP_GET && uri=="/api/status") {
     StaticJsonDocument<6144>d;
-    d["setup_complete"]=prefs.getBool("setupDone",true);d["reset_reason"]=esp_reset_reason();d["uptime"]=millis()/1000;d["heap"]=ESP.getFreeHeap();d["min_heap"]=ESP.getMinFreeHeap();d["psram"]=ESP.getPsramSize();d["free_psram"]=ESP.getFreePsram();
-    JsonObject net=d.createNestedObject("network");Network::status(net);for(const char*k:{"ip","ap_ip","connected","hotspot","needs_network_setup","ap_ssid","ssid"})d[k]=net[k];d["rssi"]=Network::connected()?WiFi.RSSI():0;d["reconnects"]=Network::reconnects.load();d["preview_fps"]=millis()-lastPreviewAt<2000?previewRate:0;d["streaming"]=streaming.load();d["stream_fps"]=streamMs.load()?streamFrames.load()*1000.0/streamMs.load():0;d["benchmark"]=Camera::busy();
-    if(xSemaphoreTake(Camera::mutex,pdMS_TO_TICKS(50))==pdTRUE){Camera::status(d.createNestedObject("camera"));xSemaphoreGive(Camera::mutex);}
-    Light::status(d.createNestedObject("flashlight"));Storage::status(d.createNestedObject("storage"));Engine::status(d.createNestedObject("app"));return json(r,d);
+    DeviceStatus::write(d.to<JsonObject>());d["preview_fps"]=millis()-lastPreviewAt<2000?previewRate:0;d["streaming"]=streaming.load();d["stream_fps"]=streamMs.load()?streamFrames.load()*1000.0/streamMs.load():0;return json(r,d);
   }
   if(r->method==HTTP_GET && uri=="/api/benchmark") {StaticJsonDocument<4096>d;Camera::benchmarkStatus(d.to<JsonObject>());return json(r,d);}
   if(r->method==HTTP_POST && uri=="/api/benchmark") {Engine::Command c;c.action=Engine::Action::Benchmark;return Engine::submit(c)?reply(r,"{}","202 Accepted"):reply(r,"{\"error\":\"Camera busy\"}","409 Conflict");}

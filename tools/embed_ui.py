@@ -8,6 +8,7 @@ service_target = root / "src/ServiceConfig.h"
 if not service_target.exists() or service_target.read_text(encoding="utf-8") != service:
     service_target.write_text(service, encoding="utf-8")
 html = (root / "data/index.html").read_text(encoding="utf-8")
+html=html.replace("/* @design-tokens */",(root/"data/design-tokens.css").read_text(encoding="utf-8"))
 for asset in ["i18n.js","alarm.js","setup.js"]:
     raw = (root / "data" / asset).read_text(encoding="utf-8-sig")
     source = raw

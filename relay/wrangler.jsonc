@@ -5,5 +5,12 @@
   "workers_dev": true,
   "durable_objects": {"bindings": [{"name": "CAMERAS", "class_name": "CameraRoom"}]},
   "migrations": [{"tag": "v1", "new_sqlite_classes": ["CameraRoom"]}],
-  "observability": {"enabled": false}
+  "observability": {"enabled": false},
+  "env": {
+    "preview": {
+      "name": "robetix-live-relay-preview",
+      "durable_objects": {"bindings": [{"name": "CAMERAS", "class_name": "CameraRoom"}]},
+      "migrations": [{"tag": "v1", "new_sqlite_classes": ["CameraRoom"]}]
+    }
+  }
 }
