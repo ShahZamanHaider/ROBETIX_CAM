@@ -12,7 +12,7 @@ void begin(){mutex=xSemaphoreCreateMutex();if(!mutex)return;for(int i=0;i<device
 static bool equal(const char*a,const char*b){if(!a||!b||strlen(a)!=64||strlen(b)!=64)return false;uint8_t diff=0;for(int i=0;i<64;i++)diff|=a[i]^b[i];return diff==0;}
 static String issueLocked(bool remember){
  String token=randomHex(32);if(token.length()!=64)return "";String hash=passwordHash(token);if(hash.length()!=64)return "";
- unsigned slot=next++%deviceLimit;for(unsigned i=0;i<deviceLimit;i++)if(!devices[i].hash[0]){slot=i;break;}
+ unsigned slot=deviceLimit;for(unsigned i=0;i<deviceLimit;i++)if(!devices[i].hash[0]){slot=i;break;}if(slot==deviceLimit)slot=next++%deviceLimit;
  String key=String("device")+slot;
  if(remember&&!prefs.putString(key.c_str(),hash))return "";
  if(!remember)prefs.remove(key.c_str());strlcpy(devices[slot].hash,hash.c_str(),65);devices[slot].remember=remember;devices[slot].since=esp_timer_get_time();devices[slot].adminUntil=0;return token;
