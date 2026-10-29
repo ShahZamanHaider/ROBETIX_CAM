@@ -7,6 +7,7 @@
 Preferences prefs;
 String adminHash, authSalt, setupSsid, setupPassword, hardwareTag;
 bool cloudCleanupPending=false;
+String hotspotPasswordFor(const String&ssid){char value[36];return FactoryPolicy::password(ssid.c_str(),value,sizeof(value))?String(value):String("");}
 String randomHex(size_t bytes) {
   String out; out.reserve(bytes * 2);
   for(size_t i=0;i<bytes;i++) { char b[3]; snprintf(b,sizeof(b),"%02x",uint8_t(esp_random())); out += b; }
@@ -33,13 +34,15 @@ void settingsBegin() {
     WiFi.scanDelete();unsigned number=FactoryPolicy::number(ESP.getEfuseMac(),occupied);
     if(!number){Serial.println("No free factory Wi-Fi name nearby; installer provisioning required");delay(5000);ESP.restart();}
     char name[24];snprintf(name,sizeof(name),"ROBETIX-VISION-%02u",number);setupSsid=name;
-    // Rejection sampling avoids modulo bias; leading zeros are valid digits.
-    uint32_t random;do{random=esp_random();}while(!FactoryPolicy::randomAccepted(random));
-    char digits[9];snprintf(digits,sizeof(digits),"%08lu",(unsigned long)FactoryPolicy::digits(random));setupPassword=digits;hardwareTag=randomHex(16);
+    setupPassword=hotspotPasswordFor(setupSsid);hardwareTag=randomHex(16);
     bool ok=factory.putString("ssid",setupSsid)&&factory.putString("password",setupPassword)&&factory.putString("hardware",hardwareTag);
     if(!ok){Serial.println("Factory provisioning failed; reboot before use");delay(1000);ESP.restart();}
 
-  }cloudCleanupPending=factory.getString("pendingOwner","").length()>0;bool finishReset=factory.getBool("resetPending",false);factory.end();
+  }
+  // Explicit owner-requested policy migration. Preserve hardware/cloud identity.
+  // Deterministic writes can safely be retried if power fails between commits.
+  if(factory.getUChar("wifiPolicy",0)<1){setupPassword=hotspotPasswordFor(setupSsid);if(setupPassword.isEmpty()||!factory.putString("password",setupPassword)||!factory.putUChar("wifiPolicy",1)){Serial.println("Wi-Fi password policy could not be saved");delay(1000);ESP.restart();}}
+  cloudCleanupPending=factory.getString("pendingOwner","").length()>0;bool finishReset=factory.getBool("resetPending",false);factory.end();
   prefs.begin("robetix",false);
   // Complete a reset before any workers start, including after power loss or
   // an old in-flight worker writing during the final restart interval.

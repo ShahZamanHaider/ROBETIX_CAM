@@ -22,11 +22,11 @@ bool configure(JsonObject o,String&error,bool&changedConfig){
  if(!o["hotspot"].is<bool>()){error="Invalid network settings";return false;}bool nextHotspot=o["hotspot"];
  String ssid=o["ssid"]|"",password=o["password"]|"",ap=o["ap_ssid"]|"",apPass=o["ap_password"]|"";
  if(o["keep_password"]|false){if(ssid!=c.ssid){error="Enter the password for the new Wi-Fi";return false;}password=c.password;}
- if(ap.isEmpty())ap=c.apSsid;if(apPass.isEmpty())apPass=c.apPassword;
+ if(ap.isEmpty())ap=c.apSsid;if(apPass.isEmpty())apPass=(ap!=c.apSsid&&c.apPassword==hotspotPasswordFor(c.apSsid))?hotspotPasswordFor(ap):c.apPassword;
  if(ap.isEmpty()||!text(ap,32)||apPass.length()<8||!text(apPass,63)){error="Choose a hotspot name (1–32 bytes) and your own hotspot password (8–63 characters)";return false;}
  if(!nextHotspot&&(ssid.isEmpty()||!text(ssid,32)||!wifiPassword(password))){error="Check SSID and Wi-Fi password lengths";return false;}
  if(!nextHotspot){c.ssid=ssid;c.password=password;}if(c.apSsid!=ap)nameConflict=false;c.apSsid=ap;c.apPassword=apPass;c.hotspot=nextHotspot;c.ready=true;c.valid=true;
- StaticJsonDocument<1024>d;d["version"]=1;d["ssid"]=c.ssid;d["password"]=c.password;d["ap_ssid"]=c.apSsid;d["ap_password"]=c.apPassword;d["hotspot"]=c.hotspot;String saved;serializeJson(d,saved);
+ StaticJsonDocument<1024>d;d["version"]=1;d["hotspot_rule"]=1;d["ready"]=c.ready;d["ssid"]=c.ssid;d["password"]=c.password;d["ap_ssid"]=c.apSsid;d["ap_password"]=c.apPassword;d["hotspot"]=c.hotspot;String saved;serializeJson(d,saved);
  xSemaphoreTake(configMutex,portMAX_DELAY);changedConfig=prefs.getString("network","")!=saved;
  // One NVS value is committed atomically; a failed write cannot mix SSIDs/passwords.
  bool ok=!d.overflowed()&&(!changedConfig||prefs.putString("network",saved)>0)&&prefs.getString("network","")==saved;if(ok)config=c;xSemaphoreGive(configMutex);
@@ -39,7 +39,14 @@ static void apply(){Config c=copy();routerEnabled=c.valid&&c.ready&&!c.hotspot&&
  Serial.printf("Camera setup: http://%s (router IP is shown after DHCP)\n",WiFi.softAPIP().toString().c_str());
 }
 void begin(){configMutex=xSemaphoreCreateMutex();if(!configMutex)return;config.apSsid=prefs.getString("apSsid",setupSsid);config.apPassword=prefs.getString("apPass",setupPassword);config.ssid=prefs.getString("ssid","");config.password=prefs.getString("wifiPass","");config.hotspot=prefs.getBool("hotspot",true);config.ready=prefs.getBool("netReady",false);
- String saved=prefs.getString("network","");if(saved.length()){StaticJsonDocument<1024>d;if(deserializeJson(d,saved)||d["version"]!=1||!d["hotspot"].is<bool>()||!d["ap_ssid"].is<const char*>()||!d["ap_password"].is<const char*>()){config.valid=false;config.ready=false;}else{config.ssid=d["ssid"]|"";config.password=d["password"]|"";config.apSsid=d["ap_ssid"]|setupSsid;config.apPassword=d["ap_password"]|setupPassword;config.hotspot=d["hotspot"];config.ready=true;}}
+ String saved=prefs.getString("network","");if(saved.length()){StaticJsonDocument<1024>d;if(deserializeJson(d,saved)||d["version"]!=1||!d["hotspot"].is<bool>()||!d["ap_ssid"].is<const char*>()||!d["ap_password"].is<const char*>()){config.valid=false;config.ready=false;}else{config.ssid=d["ssid"]|"";config.password=d["password"]|"";config.apSsid=d["ap_ssid"]|setupSsid;config.apPassword=d["ap_password"]|setupPassword;config.hotspot=d["hotspot"];config.ready=d["ready"]|true;}}
+ // Apply the requested password rule once to already-installed camera hotspots.
+ // Router credentials and setup progress are preserved in the same atomic value.
+ bool migrate=true;if(saved.length()){StaticJsonDocument<1024>old;if(!deserializeJson(old,saved)&&old["hotspot_rule"]==1)migrate=false;}
+ if(migrate&&config.valid){String next=hotspotPasswordFor(config.apSsid);if(!next.isEmpty()){
+  StaticJsonDocument<1024>d;d["version"]=1;d["hotspot_rule"]=1;d["ready"]=config.ready;d["ssid"]=config.ssid;d["password"]=config.password;d["ap_ssid"]=config.apSsid;d["ap_password"]=next;d["hotspot"]=config.hotspot;String updated;serializeJson(d,updated);
+  if(!d.overflowed()&&prefs.putString("network",updated)>0&&prefs.getString("network","")==updated)config.apPassword=next;else config.valid=false;
+ }}
  if(config.apSsid.isEmpty()||!text(config.apSsid,32)||config.apPassword.length()<8||!text(config.apPassword,63)){config.apSsid=setupSsid;config.apPassword=setupPassword;config.valid=false;config.ready=false;}if(!config.hotspot&&(config.ssid.isEmpty()||!text(config.ssid,32)||!wifiPassword(config.password))){config.valid=false;config.ready=false;}
  WiFi.persistent(false);WiFi.mode(WIFI_AP_STA);WiFi.setHostname("robetix");WiFi.setAutoReconnect(false);WiFi.setSleep(false);
  // A short display name cannot be globally unique. Report a nearby collision

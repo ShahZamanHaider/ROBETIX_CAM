@@ -24,18 +24,25 @@ The scan selector preserves exact names and status displays the actual DHCP IP.
 ## Factory credentials and labels
 
 Fresh, unprovisioned units generate a stable ROBETIX-VISION-01..99 display name
-from the chip identity with bounded nearby-name collision probing, plus an
-independent, unbiased random eight-digit WPA2 password (leading zeros allowed).
+from the chip identity with bounded nearby-name collision probing. By explicit
+owner request, the default WPA2 password is the Wi-Fi name in ASCII lowercase
+followed immediately by 786, with no extra spaces. Example: ROBETIX-VISION-01
+uses robetix-vision-01786. This is predictable from the public SSID and is not
+a secret-strength password policy. A custom password remains available.
 The persistent 128-bit hardware tag, not the short number, is the cloud identity.
 99 names cannot be globally unique. Existing labels never silently change;
 nearby duplicates are reported and the hotspot name is editable in Settings.
 Simultaneously provisioned or previously isolated units can still share a name.
 A manufacturing allocation/label process is required for a saleable batch.
 
-**Legacy devices keep their original factory label/password and current Wi-Fi
-configuration.** They are not silently reprovisioned into an unknown password.
-An old factory password is therefore not retroactively claimed to be eight digits.
-New-unit credentials are kept in rv_factory, separate from resettable robetix
+**This owner-requested update migrates existing hotspot and factory passwords once**
+to the new naming rule. Router Wi-Fi credentials, mode, setup progress and cloud
+ownership remain intact. Existing printed factory labels must be replaced.
+Ordinary restarts preserve subsequent explicitly customized passwords. Renaming
+an automatically named hotspot updates its derived password unless a custom
+password is supplied. SSIDs shorter than five bytes need an explicit password
+to meet WPA2's eight-character minimum.
+Factory credentials remain in rv_factory, separate from resettable robetix
 preferences. This namespace separation is not flash encryption.
 
 The USB recovery page shows the private factory label on explicit request,
@@ -85,7 +92,7 @@ Backend tests cover credential revocation, retained ownership and preserved data
 Browser tests cover automatic hotspot entry, denied unknown-router access,
 remembered router access, AP-only reset, first-use and local-only setup, RTL,
 private label and the USB handshake/reboot race with simulated serial transport.
-Host tests cover the bounded number allocation and unbiased password domain.
+Host tests cover the bounded number allocation, lowercase-name password rule and buffer limits.
 PlatformIO builds both esp32cam (permanent production origin) and esp32cam_preview
 (ignored pinned Preview configuration). Secret scans include staged files/history.
 
