@@ -212,5 +212,18 @@
   "Command ID was already used for another operation": "اس درخواست کا نمبر پہلے استعمال ہو چکا ہے",
   "Command was already sent. Check camera status before trying again.": "درخواست پہلے بھیجی جا چکی ہے۔ دوبارہ کوشش سے پہلے کیمرے کی حالت دیکھیں۔",
   "Camera connection interrupted": "کیمرے کا رابطہ رک گیا",
-  "Camera is busy. Check its current state.": "کیمرہ مصروف ہے۔ اس کی موجودہ حالت دیکھیں۔"
+  "Camera is busy. Check its current state.": "کیمرہ مصروف ہے۔ اس کی موجودہ حالت دیکھیں۔",
+  "Camera status is too large": "کیمرے کی حالت کی معلومات بہت زیادہ ہیں",
+  "Choose a camera": "کیمرہ منتخب کریں",
+  "Camera authorization expired": "کیمرے کی اجازت کا وقت ختم ہو گیا",
+  "Method not allowed": "یہ طریقہ دستیاب نہیں ہے",
+  "Command too large": "درخواست بہت بڑی ہے",
+  "Command authorization mismatch": "درخواست کی اجازت درست نہیں ہے",
+  "Command confirmation could not be saved. Check camera status.": "کام کی تصدیق محفوظ نہیں ہو سکی۔ کیمرے کی حالت دیکھیں۔",
+  "Recording stopped and finalized": "ریکارڈنگ بند ہو کر محفوظ ہو گئی",
+  "Settings could not be applied": "سیٹنگز تبدیل نہیں ہو سکیں",
+  "Camera resume failed": "کیمرہ دوبارہ نہیں چل سکا",
+  "Camera capture failed": "کیمرہ تصویر نہیں لے سکا",
+  "Recording write failed": "ریکارڈنگ کارڈ پر لکھی نہیں جا سکی",
+  "Photo could not be saved": "تصویر محفوظ نہیں ہو سکی"
 }
