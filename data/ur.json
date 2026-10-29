@@ -776,5 +776,6 @@
   "Live video is available when the camera and phone have Internet access and the live service is ready.": "جب کیمرہ اور فون انٹرنیٹ سے جڑے ہوں اور لائیو سروس تیار ہو تو لائیو ویڈیو دستیاب ہے.",
   "Remote monitoring shows last seen, motion history and private snapshots. Live video is available when the camera and phone have Internet access and the live service is ready. Turning Off stops future uploads; use Disconnect in the remote app to revoke access there. Already downloaded pictures cannot be recalled.": "ریموٹ نگرانی میں کیمرے کی آخری رابطے کی حالت، حرکت کی ہسٹری اور نجی تصاویر دیکھی جا سکتی ہیں۔ کیمرہ اور فون انٹرنیٹ سے جڑے ہوں اور سروس تیار ہو تو لائیو ویڈیو بھی دستیاب ہے۔ بند کرنے سے نئی اپ لوڈز رک جاتی ہیں؛ رسائی ختم کرنے کے لیے آن لائن ایپ میں کیمرہ منقطع کریں۔ پہلے سے ڈاؤن لوڈ کی گئی تصاویر واپس نہیں لی جا سکتیں۔",
   "Local access link expired. Open the camera from your trusted page again.": "مقامی رسائی کا لنک ختم ہو گیا ہے۔ اپنے قابل اعتماد صفحے سے کیمرہ دوبارہ کھولیں۔",
-  "Connect to home Wi-Fi first": "پہلے گھر کے وائی فائی سے جڑیں"
+  "Connect to home Wi-Fi first": "پہلے گھر کے وائی فائی سے جڑیں",
+  "Camera response is too large": "کیمرے کا جواب بہت بڑا ہے"
 }
