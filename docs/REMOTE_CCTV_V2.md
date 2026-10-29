@@ -107,3 +107,18 @@ cloud synthetic-camera tests prove software paths, not physical hardware.
 5. Only after approval deploy/promote the tested cloud and relay together, then
    build/upload `esp32cam` for the permanent production origin
    `https://vision.robetix.com`. Do not flash a development origin as production.
+
+USB command `DIAGNOSTICS` prints the same bounded, read-only status used by the
+authenticated dashboard. It contains no passwords, session cookies or device
+credentials. Existing `TRUST_DEVICE` recovery remains available.
+
+Physical checkpoint (2026-10-29): the connected original ESP32-CAM identified
+OV2640/native JPEG and about 4 MiB PSRAM. The Preview firmware uploaded and its
+flash hash verified without erasing NVS. SD initialization timed out (0x107) at
+20/10/5 MHz. The saved router was unavailable (Wi-Fi reason 201), so the camera
+had no router IP, no cloud handshake and zero remote frames. Home Wi-Fi setup
+and card inspection remain necessary; recording and physical remote viewing
+have not passed acceptance. Repeated synthetic cloud tests also encountered
+intermittent browser WebSocket handshake failures; a focused deployed test
+passed initial video, fresh-ticket producer reconnection and repeated Retry.
+Do not treat that as a sustained physical-device stability test.
