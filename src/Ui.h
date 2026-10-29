@@ -102,7 +102,7 @@ class LocalAccessSession{
 globalThis.LocalAccessSession=LocalAccessSession;
 })();
 
-const LOCAL_BUILD={"version":"2.4.0","source":"21c30d3296907ff6126158d98bd60ec9909bab70484022b2f784cf81e6209b68","local_protocol":2};
+const LOCAL_BUILD={"version":"2.4.0","source":"3388076ff22486466535c3f17b8e308d4d95f227cbab98c7818df980de9b1dc5","local_protocol":2};
 const $=id=>document.getElementById(id),cameraFields=['size','quality','brightness','contrast','saturation','mirror','flip'];let accessBusy=false,lastAccessSession=null,accessReady=false,recoveryBudget=0;let currentPage='home',state=null,initialized=false,networkInitialized=false,networkChanging=false,scanning=false,toastTimer,lastMessage=0,fileKind='videos',fileCursor=0,nextCursor=0,previewBusy=false,previewId=0,lastFrameAt=0,previewUrl='',previewAbort=null,online=false;
 function mediaOrigin(){return window.ROBETIX_LOCAL_MEDIA_ORIGIN||('http://'+location.hostname+':81')}
 function icon(name){return '<svg class="icon"><use href="#i-'+name+'"/></svg>'}
