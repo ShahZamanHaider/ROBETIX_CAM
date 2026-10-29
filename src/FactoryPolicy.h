@@ -10,9 +10,7 @@ inline unsigned number(uint64_t chip,const bool occupied[100]){
  for(unsigned offset=0;offset<99;offset++){unsigned n=(first-1+offset)%99+1;if(!occupied[n])return n;}
  return 0;
 }
-inline bool password(const char*ssid,char*out,size_t capacity){
- size_t length=strlen(ssid);if(length<5||length>32||capacity<length+4)return false;
- for(size_t i=0;i<length;i++){unsigned char c=ssid[i];out[i]=(c>='A'&&c<='Z')?c+('a'-'A'):c;}
- memcpy(out+length,"786",4);return true;
-}
+inline bool randomAccepted(uint32_t value){return value<4200000000UL;}
+inline uint32_t digits(uint32_t value){return value%100000000UL;}
+inline bool numeric8(const char*value){if(strlen(value)!=8)return false;for(unsigned i=0;i<8;i++)if(value[i]<'0'||value[i]>'9')return false;return true;}
 }

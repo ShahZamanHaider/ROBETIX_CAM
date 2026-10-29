@@ -1,5 +1,6 @@
 #include "Web.h"
 #include "DeviceStatus.h"
+#include "FirmwareInfo.h"
 #include "Settings.h"
 #include "Camera.h"
 #include "Network.h"
@@ -40,9 +41,16 @@ static esp_err_t cameraFrame(httpd_req_t*r,uint8_t*buffer,bool download){
 static esp_err_t reply(httpd_req_t *r,const char *body,const char *status="200 OK") {
   httpd_resp_set_status(r,status); httpd_resp_set_type(r,"application/json"); httpd_resp_set_hdr(r,"Cache-Control","no-store"); return httpd_resp_send(r,body,HTTPD_RESP_USE_STRLEN);
 }
-static esp_err_t json(httpd_req_t*r,JsonDocument &d) {String out;serializeJson(d,out);return reply(r,out.c_str());}
+static esp_err_t json(httpd_req_t*r,JsonDocument &d) {if(d.overflowed())return reply(r,"{\"error\":\"Camera status is busy. Please try again.\"}","503 Service Unavailable");String out;size_t required=measureJson(d);if(!out.reserve(required)||serializeJson(d,out)!=required)return reply(r,"{\"error\":\"Camera status is busy. Please try again.\"}","503 Service Unavailable");return reply(r,out.c_str());}
+// HTTPD borrows header pointers. Build and send in this one lifetime scope.
+static esp_err_t sendLocalSession(httpd_req_t*r,const String&token,bool remember){
+ String cookie;const char*attributes="; HttpOnly; SameSite=Strict; Path=/";
+ bool ready=token.length()==64&&cookie.reserve(3+64+strlen(attributes)+(remember?18:0))&&cookie.concat("rv=")&&cookie.concat(token.c_str())&&cookie.concat(attributes)&&(!remember||cookie.concat("; Max-Age=31536000"));
+ if(!ready||httpd_resp_set_hdr(r,"Set-Cookie",cookie.c_str())!=ESP_OK){Auth::revoke(token);return reply(r,"{\"error\":\"Could not remember this device\"}","503 Service Unavailable");}
+ return reply(r,"{}");
+}
 static bool authorized(httpd_req_t*r,String *token=nullptr) {
-  char cookie[160]={}; if(httpd_req_get_hdr_value_str(r,"Cookie",cookie,sizeof(cookie))!=ESP_OK)return false;
+  char cookie[512]={}; if(httpd_req_get_hdr_value_str(r,"Cookie",cookie,sizeof(cookie))!=ESP_OK)return false;
   char *save=nullptr;for(char*p=strtok_r(cookie,";",&save);p;p=strtok_r(nullptr,";",&save)){while(*p==' ')p++;if(strncmp(p,"rv=",3)==0&&Auth::valid(p+3)){if(token)*token=p+3;return true;}}return false;
 }
 // Require both the AP interface and an actual associated station. A router-side
@@ -92,20 +100,22 @@ static esp_err_t handler(httpd_req_t*r) {
   String uri=r->uri;int question=uri.indexOf('?');if(question>=0)uri=uri.substring(0,question);
   if(r->method==HTTP_GET&&(uri=="/generate_204"||uri=="/hotspot-detect.html"||uri=="/connecttest.txt"||uri=="/ncsi.txt")){httpd_resp_set_status(r,"302 Found");httpd_resp_set_hdr(r,"Location","http://192.168.4.1/");return httpd_resp_send(r,"",0);}
   if(r->method==HTTP_GET && uri=="/") {httpd_resp_set_type(r,"text/html");httpd_resp_set_hdr(r,"Cache-Control","no-store");httpd_resp_set_hdr(r,"X-Frame-Options","DENY");return httpd_resp_send(r,UI,HTTPD_RESP_USE_STRLEN);}
-  if(r->method==HTTP_GET && uri=="/api/session") {StaticJsonDocument<512>d;d["device"]=passwordHash("public-device-id").substring(0,16);d["setup"]=false;d["password_enabled"]=false;d["authenticated"]=authorized(r);d["local_protocol"]=1;d["camera_wifi"]=cameraWifi(r);d["interface"]=throughHotspot(r)?"hotspot":"router";d["hotspot_name"]=WiFi.softAPSSID();return json(r,d);}
+  if(r->method==HTTP_GET && uri=="/api/session") {StaticJsonDocument<1024>d;FirmwareInfo::write(d.createNestedObject("firmware"));d["device"]=passwordHash("public-device-id").substring(0,16);d["setup"]=false;d["password_enabled"]=false;d["authenticated"]=authorized(r);d["local_protocol"]=FirmwareBuild::localProtocol;d["camera_wifi"]=cameraWifi(r);d["interface"]=throughHotspot(r)?"hotspot":"router";d["hotspot_name"]=WiFi.softAPSSID();return json(r,d);}
   if(r->method==HTTP_POST && !localPost(r)) return reply(r,"{\"error\":\"JSON required\"}","415 Unsupported Media Type");
   if(r->method==HTTP_POST&&(uri=="/api/login"||uri=="/api/provision"||uri=="/api/trust"||uri=="/api/recover"||uri=="/api/authorize"))return reply(r,"{\"error\":\"Connect to the camera Wi-Fi to authorize this browser.\"}","410 Gone");
   if(r->method==HTTP_POST&&uri=="/api/hotspot-session"){
-    if(!cameraWifi(r)||!sameCameraOrigin(r))return reply(r,"{\"error\":\"Connect to the camera Wi-Fi to authorize this browser.\"}","403 Forbidden");
-    if(!authorized(r)){String token=Auth::issue(true);if(token.isEmpty())return reply(r,"{\"error\":\"Could not remember this device\"}","503 Service Unavailable");String cookie="rv="+token+"; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000";httpd_resp_set_hdr(r,"Set-Cookie",cookie.c_str());}
+    if(!cameraWifi(r))return reply(r,"{\"error\":\"Connect to the camera Wi-Fi to authorize this browser.\",\"code\":\"camera_wifi_required\"}","403 Forbidden");
+    if(!sameCameraOrigin(r))return reply(r,"{\"error\":\"Open this camera directly at its local address, then try again.\",\"code\":\"origin_rejected\"}","403 Forbidden");
+    StaticJsonDocument<64> payload;if(!body(r,payload))return reply(r,"{\"error\":\"Invalid request\"}","400 Bad Request");
+    if(!authorized(r)){String token=Auth::issue(true);if(token.isEmpty())return reply(r,"{\"error\":\"Could not remember this device\"}","503 Service Unavailable");return sendLocalSession(r,token,true);}
     return reply(r,"{}");
   }
-  if(r->method==HTTP_POST&&uri=="/api/accept-handoff"){StaticJsonDocument<128>d;if(!body(r,d))return reply(r,"{\"error\":\"Invalid request\"}","400 Bad Request");bool remember=false;String token=Auth::acceptHandoff(d["code"]|"",remember);if(token.isEmpty())return reply(r,"{\"error\":\"Local access link expired. Open the camera from your trusted page again.\"}","403 Forbidden");String cookie="rv="+token+"; HttpOnly; SameSite=Strict; Path=/";if(remember)cookie+="; Max-Age=31536000";httpd_resp_set_hdr(r,"Set-Cookie",cookie.c_str());return reply(r,"{}");}
+  if(r->method==HTTP_POST&&uri=="/api/accept-handoff"){StaticJsonDocument<128>d;if(!body(r,d))return reply(r,"{\"error\":\"Invalid request\"}","400 Bad Request");bool remember=false;String token=Auth::acceptHandoff(d["code"]|"",remember);if(token.isEmpty())return reply(r,"{\"error\":\"Local access link expired. Open the camera from your trusted page again.\"}","403 Forbidden");return sendLocalSession(r,token,remember);}
   if(!authorized(r))return reply(r,"{\"error\":\"Sign in required\"}","401 Unauthorized");
   if(r->method==HTTP_POST&&uri=="/api/handoff"){String token;authorized(r,&token);String code=Auth::handoff(token);if(code.isEmpty()||!Network::connected())return reply(r,"{\"error\":\"Connect to home Wi-Fi first\"}","409 Conflict");StaticJsonDocument<192>d;d["code"]=code;d["ip"]=WiFi.localIP().toString();d["expires_in"]=60;return json(r,d);}
 
   if(r->method==HTTP_POST&&uri=="/api/setup"){StaticJsonDocument<64>d;if(!body(r,d)||d["complete"]!=true)return reply(r,"{\"error\":\"Invalid request\"}","400 Bad Request");return prefs.putBool("setupDone",true)?reply(r,"{}"):reply(r,"{\"error\":\"Settings write failed\"}","500 Internal Server Error");}
-  if(r->method==HTTP_POST && uri=="/api/logout") {String token;authorized(r,&token);Auth::revoke(token);httpd_resp_set_hdr(r,"Set-Cookie","rv=; Path=/; Max-Age=0");return reply(r,"{}");}
+  if(r->method==HTTP_POST && uri=="/api/logout") {String token;authorized(r,&token);Auth::revoke(token);httpd_resp_set_hdr(r,"Set-Cookie","rv=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0");return reply(r,"{}");}
   if(r->method==HTTP_GET && uri=="/api/status") {
     StaticJsonDocument<6144>d;
     DeviceStatus::write(d.to<JsonObject>());d["preview_fps"]=millis()-lastPreviewAt<2000?previewRate:0;d["streaming"]=streaming.load();d["stream_fps"]=streamMs.load()?streamFrames.load()*1000.0/streamMs.load():0;return json(r,d);

@@ -22,6 +22,9 @@ jobs:
       - run: npm --prefix remote run build
       - run: git diff --exit-code -- remote/public/i18n.js
       - run: npm --prefix remote test
+      - run: python tools/test_build_identity.py
+      - run: node tools/test-local-access.cjs
+      - run: node tools/test-local-proxy.mjs
       - run: node tools/test-i18n.cjs
       - run: npm install --prefix .pio/sql-test @electric-sql/pglite@0.5.12 --no-audit --no-fund
       - run: node tools/test-recipients-sql.mjs

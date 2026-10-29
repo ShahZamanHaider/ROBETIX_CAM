@@ -809,5 +809,18 @@
   "Checking camera access…": "کیمرے سے رابطہ چیک ہو رہا ہے…",
   "Stay connected to the camera Wi-Fi and tap Try again. If access is still refused, disconnect and reconnect to that Wi-Fi.": "کیمرے کے وائی فائی سے جڑے رہیں اور دوبارہ کوشش کریں دبائیں۔ رسائی نہ ملے تو اسی وائی فائی سے دوبارہ جڑیں۔",
   "The camera has not confirmed this Wi-Fi connection yet. Reconnect to camera Wi-Fi and try again.": "کیمرا ابھی اس وائی فائی رابطے کی تصدیق نہیں کر سکا۔ کیمرے کے وائی فائی سے دوبارہ جڑ کر کوشش کریں۔",
-  "Try again": "دوبارہ کوشش کریں"
+  "Try again": "دوبارہ کوشش کریں",
+  "Set up home Wi-Fi": "گھر کا وائی فائی سیٹ کریں",
+  "Firmware": "فرم ویئر",
+  "Local changes": "مقامی تبدیلیاں",
+  "Preview": "آزمائشی",
+  "Production": "اصل سروس",
+  "Firmware build is unknown.": "فرم ویئر کے ورژن کی معلومات دستیاب نہیں۔",
+  "Camera software needs updating. Please contact your installer.": "کیمرے کا سافٹ ویئر اپ ڈیٹ کرنا ضروری ہے۔ انسٹالر سے رابطہ کریں۔",
+  "This page and camera use different software. Reload the page or update the camera.": "اس صفحے اور کیمرے کے سافٹ ویئر مختلف ہیں۔ صفحہ دوبارہ کھولیں یا کیمرا اپ ڈیٹ کریں۔",
+  "This page matches the camera firmware.": "یہ صفحہ کیمرے کے فرم ویئر سے مطابقت رکھتا ہے۔",
+  "Camera connection needs attention. Open the camera page again.": "کیمرے سے رابطہ چیک کریں۔ کیمرے کا صفحہ دوبارہ کھولیں۔",
+  "Camera connection restored. Please try that action again.": "کیمرے سے رابطہ بحال ہوگیا۔ وہ کام دوبارہ کریں۔",
+  "Open this camera directly at its local address, then try again.": "کیمرے کا مقامی پتہ براہ راست کھولیں، پھر کوشش کریں۔",
+  "Camera status is busy. Please try again.": "کیمرا مصروف ہے۔ دوبارہ کوشش کریں۔"
 }

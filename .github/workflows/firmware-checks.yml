@@ -1,9 +1,9 @@
 name: Firmware compile
 on:
   push:
-    paths: ['src/**', 'data/**', 'platformio.ini', 'remote/service-origins.json', 'tools/embed_ui.py', 'tools/preview_firmware.py', 'tools/test-preview-config.py', '.github/workflows/firmware-checks.yml']
+    paths: ['src/**', 'data/**', 'platformio.ini', 'remote/service-origins.json', 'tools/**', 'firmware/**', 'tools/preview_firmware.py', 'tools/test-preview-config.py', '.github/workflows/firmware-checks.yml']
   pull_request:
-    paths: ['src/**', 'data/**', 'platformio.ini', 'remote/service-origins.json', 'tools/embed_ui.py', 'tools/preview_firmware.py', 'tools/test-preview-config.py', '.github/workflows/firmware-checks.yml']
+    paths: ['src/**', 'data/**', 'platformio.ini', 'remote/service-origins.json', 'tools/**', 'firmware/**', 'tools/preview_firmware.py', 'tools/test-preview-config.py', '.github/workflows/firmware-checks.yml']
 permissions:
   contents: read
 jobs:
@@ -15,6 +15,9 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install platformio==6.2.0
+      - run: python tools/test_ap_startup.py
+      - run: python tools/test_auth_store.py
+      - run: python tools/test_session_response.py
       - run: python tools/test-preview-config.py
       - run: python tools/build-service-roots.py --check
       - run: g++ -std=c++17 tools/test_live_lease.cpp -o /tmp/rv-lease && /tmp/rv-lease
