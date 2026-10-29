@@ -225,5 +225,6 @@
   "Camera resume failed": "کیمرہ دوبارہ نہیں چل سکا",
   "Camera capture failed": "کیمرہ تصویر نہیں لے سکا",
   "Recording write failed": "ریکارڈنگ کارڈ پر لکھی نہیں جا سکی",
-  "Photo could not be saved": "تصویر محفوظ نہیں ہو سکی"
+  "Photo could not be saved": "تصویر محفوظ نہیں ہو سکی",
+  "Pair while connected to camera Wi-Fi with its Settings page open. A code expires after five minutes.": "کیمرے کے وائی فائی سے جڑ کر اس کا سیٹنگز صفحہ کھولیں، پھر پیئر کریں۔ کوڈ پانچ منٹ بعد ختم ہوجاتا ہے۔"
 }
