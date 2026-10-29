@@ -18,9 +18,10 @@
 #include <esp_timer.h>
 #include <WiFi.h>
 #include <lwip/sockets.h>
+#include <esp_wifi.h>
+#include <esp_netif_sta_list.h>
 #include <atomic>
 static httpd_handle_t controlServer,streamServer;
-static int64_t loginAfter=0;
 static std::atomic<uint32_t> streamFrames{0},streamMs{0};
 static std::atomic<bool> streaming{false};
 static uint32_t previewRateAt=0,previewDelivered=0,lastPreviewAt=0,lastPreviewId=0;static float previewRate=0;
@@ -42,6 +43,23 @@ static bool authorized(httpd_req_t*r,String *token=nullptr) {
   char cookie[160]={}; if(httpd_req_get_hdr_value_str(r,"Cookie",cookie,sizeof(cookie))!=ESP_OK)return false;
   char *save=nullptr;for(char*p=strtok_r(cookie,";",&save);p;p=strtok_r(nullptr,";",&save)){while(*p==' ')p++;if(strncmp(p,"rv=",3)==0&&Auth::valid(p+3)){if(token)*token=p+3;return true;}}return false;
 }
+// Require both the AP interface and an actual associated station. A router-side
+// request, forged Host header or client IP by itself cannot establish trust.
+static bool cameraWifi(httpd_req_t*r){
+ sockaddr_in local={},peer={};socklen_t n=sizeof(local);int fd=httpd_req_to_sockfd(r);
+ if(getsockname(fd,(sockaddr*)&local,&n)||IPAddress(local.sin_addr.s_addr)!=WiFi.softAPIP())return false;
+ n=sizeof(peer);if(getpeername(fd,(sockaddr*)&peer,&n))return false;
+ wifi_sta_list_t stations={};esp_netif_sta_list_t addresses={};
+ if(esp_wifi_ap_get_sta_list(&stations)!=ESP_OK||esp_netif_get_sta_list(&stations,&addresses)!=ESP_OK)return false;
+ for(int i=0;i<addresses.num;i++)if(addresses.sta[i].ip.addr==peer.sin_addr.s_addr)return true;
+ return false;
+}
+static bool sameCameraOrigin(httpd_req_t*r){
+ char host[80]={},origin[96]={};if(httpd_req_get_hdr_value_str(r,"Host",host,sizeof(host))!=ESP_OK)return false;
+ String h=host;bool known=h=="192.168.4.1"||h==WiFi.localIP().toString()||h=="robetix.local";
+ if(!known)return false;
+ return httpd_req_get_hdr_value_str(r,"Origin",origin,sizeof(origin))==ESP_OK&&String(origin)=="http://"+h;
+}
 static bool body(httpd_req_t*r,JsonDocument&d) {
   if(r->content_len<=0 || r->content_len>768) return false;
   char b[769];int offset=0;
@@ -57,41 +75,18 @@ static esp_err_t handler(httpd_req_t*r) {
   String uri=r->uri;int question=uri.indexOf('?');if(question>=0)uri=uri.substring(0,question);
   if(r->method==HTTP_GET&&(uri=="/generate_204"||uri=="/hotspot-detect.html"||uri=="/connecttest.txt"||uri=="/ncsi.txt")){httpd_resp_set_status(r,"302 Found");httpd_resp_set_hdr(r,"Location","http://192.168.4.1/");return httpd_resp_send(r,"",0);}
   if(r->method==HTTP_GET && uri=="/") {httpd_resp_set_type(r,"text/html");httpd_resp_set_hdr(r,"Cache-Control","no-store");httpd_resp_set_hdr(r,"X-Frame-Options","DENY");return httpd_resp_send(r,UI,HTTPD_RESP_USE_STRLEN);}
-  if(r->method==HTTP_GET && uri=="/api/session") {StaticJsonDocument<192>d;d["device"]=passwordHash("public-device-id").substring(0,16);d["setup"]=adminHash.isEmpty();d["password_enabled"]=!prefs.getBool("cardOwner",false);d["authenticated"]=authorized(r);return json(r,d);}
+  if(r->method==HTTP_GET && uri=="/api/session") {StaticJsonDocument<192>d;d["device"]=passwordHash("public-device-id").substring(0,16);d["setup"]=false;d["password_enabled"]=false;d["authenticated"]=authorized(r);return json(r,d);}
   if(r->method==HTTP_POST && !localPost(r)) return reply(r,"{\"error\":\"JSON required\"}","415 Unsupported Media Type");
+  if(r->method==HTTP_POST&&(uri=="/api/login"||uri=="/api/provision"||uri=="/api/trust"||uri=="/api/recover"||uri=="/api/authorize"))return reply(r,"{\"error\":\"Connect to the camera Wi-Fi to authorize this browser.\"}","410 Gone");
+  if(r->method==HTTP_POST&&uri=="/api/hotspot-session"){
+    if(!cameraWifi(r)||!sameCameraOrigin(r))return reply(r,"{\"error\":\"Connect to the camera Wi-Fi to authorize this browser.\"}","403 Forbidden");
+    if(!authorized(r)){String token=Auth::issue(true);if(token.isEmpty())return reply(r,"{\"error\":\"Could not remember this device\"}","503 Service Unavailable");String cookie="rv="+token+"; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000";httpd_resp_set_hdr(r,"Set-Cookie",cookie.c_str());}
+    return reply(r,"{}");
+  }
   if(r->method==HTTP_POST&&uri=="/api/accept-handoff"){StaticJsonDocument<128>d;if(!body(r,d))return reply(r,"{\"error\":\"Invalid request\"}","400 Bad Request");bool remember=false;String token=Auth::acceptHandoff(d["code"]|"",remember);if(token.isEmpty())return reply(r,"{\"error\":\"Local access link expired. Open the camera from your trusted page again.\"}","403 Forbidden");String cookie="rv="+token+"; HttpOnly; SameSite=Strict; Path=/";if(remember)cookie+="; Max-Age=31536000";httpd_resp_set_hdr(r,"Set-Cookie",cookie.c_str());return reply(r,"{}");}
-  if(r->method==HTTP_POST&&(uri=="/api/provision"||uri=="/api/trust")){
-    if(esp_timer_get_time()<loginAfter)return reply(r,"{\"error\":\"Wait before retrying login\"}","429 Too Many Requests");loginAfter=esp_timer_get_time()+2000000;
-    StaticJsonDocument<256>d;if(!body(r,d))return reply(r,"{\"error\":\"Invalid request\"}","400 Bad Request");String token,error;
-    if(uri=="/api/provision"){
-      sockaddr_in local={};socklen_t size=sizeof(local);String code=d["code"]|"";
-      if(!adminHash.isEmpty()||getsockname(httpd_req_to_sockfd(r),(sockaddr*)&local,&size)!=0||IPAddress(local.sin_addr.s_addr)!=WiFi.softAPIP()||code!=setupPassword)return reply(r,"{\"error\":\"Join the camera Wi-Fi and enter the private setup-card code\"}","403 Forbidden");
-      if(!setAdminPassword(randomHex(24))||!prefs.putBool("cardOwner",true))return reply(r,"{\"error\":\"Settings write failed\"}","500 Internal Server Error");token=Auth::issue(true);
-    }else token=Auth::trust(d["code"]|"",error);
-    if(token.isEmpty()){StaticJsonDocument<256>out;out["error"]=error.length()?error:"Could not create session";String text;serializeJson(out,text);return reply(r,text.c_str(),"403 Forbidden");}
-    String cookie="rv="+token+"; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000";httpd_resp_set_hdr(r,"Set-Cookie",cookie.c_str());return reply(r,"{}");
-  }
-  if(r->method==HTTP_POST && uri=="/api/login") {
-    if(esp_timer_get_time()<loginAfter)return reply(r,"{\"error\":\"Wait before retrying login\"}","429 Too Many Requests");
-    loginAfter=esp_timer_get_time()+2000000;
-    StaticJsonDocument<1024>d;if(!body(r,d))return reply(r,"{\"error\":\"Invalid request\"}","400 Bad Request");
-    String pass=d["password"]|"";
-    if(adminHash.isEmpty()) {
-      if(pass.length()<12 || pass.length()>64)return reply(r,"{\"error\":\"Choose a 12–64 character administrator password\"}","400 Bad Request");
-      if(!setAdminPassword(pass)){return reply(r,"{\"error\":\"Settings write failed\"}","500 Internal Server Error");}
-    } else if(pass.length()>64 || passwordHash(pass)!=adminHash) return reply(r,"{\"error\":\"Incorrect password\"}","403 Forbidden");
-    bool remember=d["remember"]|false;String token=Auth::issue(remember);if(token.isEmpty())return reply(r,"{\"error\":\"Could not create session\"}","500 Internal Server Error");String cookie="rv="+token+"; HttpOnly; SameSite=Strict; Path=/";if(remember)cookie+="; Max-Age=31536000";
-    httpd_resp_set_hdr(r,"Set-Cookie",cookie.c_str());return reply(r,"{}");
-  }
-  if(r->method==HTTP_POST&&uri=="/api/recover"){
-    if(esp_timer_get_time()<loginAfter)return reply(r,"{\"error\":\"Wait before retrying login\"}","429 Too Many Requests");loginAfter=esp_timer_get_time()+2000000;
-    StaticJsonDocument<512>d;if(!body(r,d))return reply(r,"{\"error\":\"Invalid request\"}","400 Bad Request");String error;
-    if(!Auth::recover(d["code"]|"",d["password"]|"",error)){StaticJsonDocument<256>out;out["error"]=error.length()?error:"Recovery is unavailable";String text;serializeJson(out,text);return reply(r,text.c_str(),"403 Forbidden");}
-    httpd_resp_set_hdr(r,"Set-Cookie","rv=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict");return reply(r,"{\"updated\":true}");
-  }
   if(!authorized(r))return reply(r,"{\"error\":\"Sign in required\"}","401 Unauthorized");
   if(r->method==HTTP_POST&&uri=="/api/handoff"){String token;authorized(r,&token);String code=Auth::handoff(token);if(code.isEmpty()||!Network::connected())return reply(r,"{\"error\":\"Connect to home Wi-Fi first\"}","409 Conflict");StaticJsonDocument<192>d;d["code"]=code;d["ip"]=WiFi.localIP().toString();d["expires_in"]=60;return json(r,d);}
-  if(r->method==HTTP_POST&&uri=="/api/authorize"){if(esp_timer_get_time()<loginAfter)return reply(r,"{\"error\":\"Wait before retrying login\"}","429 Too Many Requests");loginAfter=esp_timer_get_time()+2000000;StaticJsonDocument<256>d;if(!body(r,d))return reply(r,"{\"error\":\"Invalid request\"}","400 Bad Request");String token,error;authorized(r,&token);return Auth::authorize(token,d["proof"]|"",error)?reply(r,"{}"):reply(r,"{\"error\":\"Use your camera password or a fresh USB recovery code\"}","403 Forbidden");}
+
   if(r->method==HTTP_POST&&uri=="/api/setup"){StaticJsonDocument<64>d;if(!body(r,d)||d["complete"]!=true)return reply(r,"{\"error\":\"Invalid request\"}","400 Bad Request");return prefs.putBool("setupDone",true)?reply(r,"{}"):reply(r,"{\"error\":\"Settings write failed\"}","500 Internal Server Error");}
   if(r->method==HTTP_POST && uri=="/api/logout") {String token;authorized(r,&token);Auth::revoke(token);httpd_resp_set_hdr(r,"Set-Cookie","rv=; Path=/; Max-Age=0");return reply(r,"{}");}
   if(r->method==HTTP_GET && uri=="/api/status") {
@@ -122,7 +117,7 @@ static esp_err_t handler(httpd_req_t*r) {
     if(action=="record")c.action=Engine::Action::Start;else if(action=="stop")c.action=Engine::Action::Stop;else if(action=="photo")c.action=Engine::Action::Photo;else if(action=="restart")c.action=Engine::Action::Restart;
     else if(action=="light"&&d["brightness"].is<int>()&&d["brightness"].as<int>()>=0&&d["brightness"].as<int>()<=100){c.action=Engine::Action::Light;c.camera[0]=d["brightness"];}
     else if(action=="reset_camera")c.action=Engine::Action::ResetCamera;
-    else if(action=="factory_reset"&&String(d["confirmation"]|"")=="ERASE SETTINGS"){String token;authorized(r,&token);if(!Auth::sensitive(token))return reply(r,"{\"error\":\"Confirm owner access before resetting settings\"}","403 Forbidden");c.action=Engine::Action::FactoryReset;}
+    else if(action=="factory_reset"&&String(d["confirmation"]|"")=="ERASE SETTINGS"){if(!cameraWifi(r)||!sameCameraOrigin(r))return reply(r,"{\"error\":\"Connect to the camera Wi-Fi before factory reset.\"}","403 Forbidden");c.action=Engine::Action::FactoryReset;}
     else if(action=="privacy"&&d["enabled"].is<bool>()){c.action=Engine::Action::Privacy;c.flag=d["enabled"];}else return reply(r,"{\"error\":\"Unknown action\"}","400 Bad Request");
     return Engine::submit(c)?reply(r,"{}","202 Accepted"):reply(r,"{\"error\":\"Camera busy; retry\"}","409 Conflict");
   }

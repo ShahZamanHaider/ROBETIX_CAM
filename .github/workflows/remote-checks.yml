@@ -47,6 +47,7 @@ jobs:
       - run: node tools/test-ui.cjs
       - run: node tools/test-setup-ui.cjs
       - run: node tools/test-local-trust.cjs
+      - run: node tools/test-usb-recovery.cjs
       - run: node tools/test-remote-setup.cjs
 
   relay:

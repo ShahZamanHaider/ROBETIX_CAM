@@ -1,5 +1,5 @@
 #include "Live.h"
-#include "TrustBundle.h"
+#include "TlsRoots.h"
 #include "Engine.h"
 #include "RemoteControl.h"
 #include "LiveLease.h"
@@ -25,7 +25,7 @@ static String b64(const uint8_t*p,size_t n){unsigned char out[64];size_t len=0;m
 static bool connect(){connectAttempts++;handshakeCode=0;if(!url.startsWith("wss://")||proof.length()>1400||proof.isEmpty()||!lease.valid(millis(),3000))return false;
  String target=url.substring(6);int slash=target.indexOf('/');if(slash<1)return false;String host=target.substring(0,slash),path=target.substring(slash);for(auto c:host)if(!isalnum((unsigned char)c)&&c!='.'&&c!='-')return false;
  if(ESP.getFreeHeap()<68000||heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)<32000){strlcpy(state,"memory_limited",sizeof(state));strlcpy(lastError,"Insufficient internal heap for TLS",sizeof(lastError));return false;}
- client.setCACertBundle(ROBETIX_ROOTS);client.setHandshakeTimeout(4);client.setTimeout(2000);if(!client.connect(host.c_str(),443)){strlcpy(lastError,"TLS connection failed",sizeof(lastError));return false;}
+ client.setCACert(ROBETIX_SERVICE_ROOTS);client.setHandshakeTimeout(4);client.setTimeout(2);if(!client.connect(host.c_str(),443,3000)){strlcpy(lastError,"TLS connection failed",sizeof(lastError));return false;}
  uint8_t nonce[16];esp_fill_random(nonce,16);String key=b64(nonce,16),expected=key+"258EAFA5-E914-47DA-95CA-C5AB0DC85B11";uint8_t digest[20];mbedtls_sha1_ret((const uint8_t*)expected.c_str(),expected.length(),digest);expected=b64(digest,20);
  String req="GET "+path+" HTTP/1.1\r\nHost: "+host+"\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: "+key+"\r\nSec-WebSocket-Protocol: robetix.live.v1, ticket."+proof+"\r\n\r\n";
  if(!writeAll((const uint8_t*)req.c_str(),req.length()))return false;String headers;uint32_t start=millis();while(millis()-start<3000&&headers.length()<4096){if(client.available()){headers+=(char)client.read();if(headers.endsWith("\r\n\r\n"))break;}else delay(2);}handshakeCode=headers.substring(9,12).toInt();if(!headers.startsWith("HTTP/1.1 101 ")||headers.indexOf(expected)<0||headers.indexOf("robetix.live.v1")<0)return false;

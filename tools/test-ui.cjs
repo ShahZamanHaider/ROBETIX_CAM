@@ -15,7 +15,7 @@ const server=http.createServer((req,res)=>{
  let input='';req.on('data',c=>input+=c);req.on('end',()=>{
   let body=input?JSON.parse(input):null;calls.push({url:url.pathname,body});res.setHeader('Content-Type','application/json');const send=d=>res.end(JSON.stringify(d));
   if(url.pathname==='/api/session')return send({setup,authenticated});
-  if(url.pathname==='/api/login'){authenticated=true;setup=false;return send({})}
+  if(url.pathname==='/api/hotspot-session'){authenticated=true;setup=false;return send({})}
   if(!authenticated){res.statusCode=401;return send({error:'Sign in required'})}
   if(url.pathname==='/api/preview'){if(stall){res.statusCode=503;return send({error:'Waiting for frame'})}res.setHeader('Content-Type','image/png');res.setHeader('X-Frame-Id',String(++frameId));return res.end(png)}
   if(url.pathname==='/api/status')return send(status);
@@ -32,7 +32,7 @@ const server=http.createServer((req,res)=>{
   if(url.pathname==='/api/cloud/test')return send({});
   if(url.pathname==='/api/cleanup')return send({phase:'ready',count:2,bytes:2000,token:'0123456789abcdef0123456789abcdef',log:[]});
   if(url.pathname==='/api/events')return send({events:[{id:1,camera:'Front Door',note:'Movement detected',epoch:0,notification:'submitted',photo:'',video:''}]});
-  if(url.pathname==='/api/scan')return send({running:false,networks:[{ssid:'<script>unsafe</script>',rssi:-55}]});
+  if(url.pathname==='/api/scan')return send({running:false,networks:[{ssid:'<script>unsafe</script>',rssi:-55},{ssid:'Home Router ',rssi:-45}]});
   if(url.pathname==='/api/logout'){authenticated=false;return send({})}
   if(url.pathname==='/api/network'){status.hotspot=body.hotspot;status.ap_ssid=body.ap_ssid;status.ssid=body.ssid;status.needs_network_setup=false;return send({})}
   res.statusCode=404;send({error:'Not found'});
@@ -42,8 +42,7 @@ const server=http.createServer((req,res)=>{
  await new Promise(r=>server.listen(0,'127.0.0.1',r));
  const browser=await chromium.launch({channel:process.env.ROBETIX_BROWSER_CHANNEL||'msedge',headless:true});const page=await browser.newPage({viewport:{width:1440,height:1000}});const errors=[],dialogs=[];page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>{dialogs.push(d.message());return d.accept()});
  try{
-  await page.goto('http://127.0.0.1:'+server.address().port);await page.locator('#loginForm').waitFor({state:'visible'});
-  await page.locator('#password').fill('test-password-123');await page.locator('#loginForm button').click();
+  await page.goto('http://127.0.0.1:'+server.address().port);
   await page.waitForFunction(()=>document.querySelector('#connectionText').textContent==='Connected');
   await page.locator('#feed').waitFor({state:'visible'});
   assert.equal(await page.locator('#feed').evaluate(e=>getComputedStyle(e).objectFit),'contain');
@@ -59,11 +58,11 @@ const server=http.createServer((req,res)=>{
   await page.locator('nav [data-page=settings]').click();await page.waitForFunction(expected=>new URL(document.querySelector('#simplePairSite').href).origin===expected,cloudFixture.default_service_url);await page.waitForFunction(()=>document.querySelector('#name').value==='Front Door');await page.locator('#name').fill('Garden');await page.locator('#pictureForm button').click();
   await page.waitForFunction(()=>document.querySelector('#notice').textContent.includes('Applying picture'));assert(calls.some(c=>c.url==='/api/options'&&c.body.name==='Garden'));assert.equal(await page.locator('#settingsPreviewDock #feed').count(),1);
   await page.locator('#hotspot').selectOption('false');await page.locator('#routerFields').waitFor({state:'visible'});await page.locator('#scan').click();
-  await page.waitForFunction(()=>document.querySelector('#networks').children.length===1);assert.equal(await page.locator('#networks script').count(),0);
+  await page.waitForFunction(()=>document.querySelector('#networks').children.length===2);assert.equal(await page.locator('#networks script').count(),0);await page.locator('#wifiChoices').selectOption({index:2});assert.equal(await page.locator('#ssid').inputValue(),'Home Router ','Scan selection must preserve trailing SSID bytes');await page.locator('#wifiPassword').fill('test-network-only');await page.locator('#saveNetwork').click();await page.waitForTimeout(100);assert(calls.some(c=>c.url==='/api/network'&&c.body.ssid==='Home Router '),'Saved Wi-Fi must preserve selected SSID bytes');
   await page.setViewportSize({width:390,height:844});await page.locator('nav [data-page=home]').click();await page.locator('#feed').waitFor({state:'visible'});
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Mobile overflow');
   await page.screenshot({path:'.pio/ui-test/results/home-mobile.png',fullPage:true});
-  assert(calls.some(c=>c.url==='/api/login'&&c.body.remember===true));
+  assert(calls.some(c=>c.url==='/api/hotspot-session'));assert.equal(await page.locator('input[type=password]').filter({visible:true}).count(),0);
   assert.equal(await page.locator('#lightLevel').getAttribute('max'),'100');await page.locator('#homeZoomIn').click();assert((await page.locator('#feed').getAttribute('style')).includes('scale('));await page.locator('#homeResetZoom').click();assert.equal(await page.locator('#homeZoom').inputValue(),'1');
   await page.locator('#lightButton').click();await page.waitForTimeout(100);assert(calls.some(c=>c.body?.action==='light'&&c.body.brightness===40));
   await page.locator('#homeMotion').check();await page.waitForTimeout(100);assert(calls.some(c=>c.body?.motion===true));
@@ -73,14 +72,14 @@ const server=http.createServer((req,res)=>{
   status.storage.available=false;await page.waitForFunction(()=>document.querySelector('#photo').disabled);assert(await page.locator('#record').isDisabled());
   await page.locator('nav [data-page=settings]').click();await page.screenshot({path:'.pio/ui-test/results/settings-mobile.png',fullPage:true});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Settings mobile overflow');await page.locator('#language').selectOption('ur');await page.waitForFunction(()=>document.documentElement.dir==='rtl');
   for(const section of ['home','saved','activity','settings']){await page.locator('nav [data-page='+section+']').click();await page.waitForTimeout(150);assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Urdu mobile overflow on '+section)}
-  assert.equal(await page.locator('#name').inputValue(),'Garden');assert.equal(await page.locator('#ssid').inputValue(),'Home Wi-Fi');assert.equal(await page.locator('#size').inputValue(),'8');
+  assert.equal(await page.locator('#name').inputValue(),'Garden');assert.equal(await page.locator('#ssid').inputValue(),'Home Router ');assert.equal(await page.locator('#size').inputValue(),'8');
   await page.evaluate(()=>note('Incorrect password',true));await page.waitForFunction(()=>document.querySelector('#notice').textContent.includes('درست نہیں'));
   await page.evaluate(()=>confirm('Delete this video permanently?'));assert(dialogs.at(-1).includes('حذف'));
   await page.locator('nav [data-page=home]').click();await page.evaluate(()=>{motionAlarm.mute();motionAlarm.event(999)});await page.waitForFunction(()=>document.querySelector('#alarmCount').textContent.includes('حرکت'));await page.locator('#homeStopAlarm').click();
   await page.screenshot({path:'.pio/ui-test/results/home-urdu-mobile.png',fullPage:true});await page.setViewportSize({width:1440,height:1000});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:'.pio/ui-test/results/home-urdu-desktop.png',fullPage:true});
   await page.reload();await page.waitForFunction(()=>document.documentElement.lang==='ur');await page.locator('nav [data-page=settings]').click();await page.locator('#simpleTestMotion').click();await page.waitForTimeout(150);await page.locator('#simpleTestMotion').click();assert(calls.some(c=>c.url==='/api/motion/test'&&c.body.enabled===false));await page.waitForFunction(()=>!calibrating);testFailure=true;await page.locator('#simpleTestMotion').click();await page.waitForTimeout(200);assert.equal(await page.evaluate(()=>calibrating),false,'A rejected test request must not enable the client subscription');testFailure=false;
   const missing=await page.evaluate(()=>Array.from(I18n.missing));assert.deepEqual(missing,[],'Missing translations: '+missing.join(' | '));await page.locator('#language').selectOption('en');await page.waitForFunction(()=>document.documentElement.dir==='ltr');await page.locator('#logout').click();await page.locator('#login').waitFor({state:'visible'});assert.deepEqual(errors,[]);
-  console.log('PASS: login, fresh preview, stale-frame hiding, recording/stop state, photo action, file download/deletion, camera settings, AP/STA fields, safe SSIDs, mobile layout, missing card, remembered Home entry, flashlight request, motion toggle, confirmed date deletion and logout. Simulated APIs only.');
+  console.log('PASS: automatic hotspot access, fresh preview, stale-frame hiding, recording/stop state, photo action, file download/deletion, camera settings, AP/STA fields, safe SSIDs, mobile layout, missing card, remembered Home entry, flashlight request, motion toggle, confirmed date deletion and logout. Simulated APIs only.');
  }finally{await browser.close();server.close()}
 })().catch(e=>{console.error(e);server.close();process.exitCode=1});
 

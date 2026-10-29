@@ -1,6 +1,7 @@
 #include "Cloud.h"
 #include "Live.h"
-#include "TrustBundle.h"
+#include "TlsRoots.h"
+#include "VerifiedTLS.h"
 #include "Settings.h"
 #include "ServiceOrigin.h"
 #include "Network.h"
@@ -15,6 +16,7 @@
 #include <atomic>
 namespace Cloud {
 static constexpr size_t MAX_IMAGE=128*1024;
+static std::atomic<bool> resetRequested{false},resetDone{false},resetVerified{false};
 struct Config{String url,ca,code,id,token,phone,requestId;uint32_t revision=0,pairEpoch=0;bool remote=false,wa=false,photo=true,optIn=false;uint16_t interval=60;uint8_t retentionDays=7;int16_t timezoneMinutes=0;};
 struct Job{uint32_t event=0,epoch=0;uint8_t score=0;int16_t offset=0;bool test=false;size_t length=0;char key[65]={};};
 static std::atomic<uint32_t> nameRevision{0};static uint32_t nameAck=0;
@@ -46,17 +48,18 @@ static bool request(const Config&c,const char*action,const uint8_t*body,size_t l
  if(status)*status=0;if(!Network::connected()||!Engine::epoch()){report("waiting","Connect to home Wi-Fi and open this camera page to set its clock.");return false;}
  Live::close();
  if(ESP.getFreeHeap()<65000||heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)<30000){report("waiting","Cloud request skipped to preserve recording memory");return false;}
- WiFiClientSecure tls;if(c.ca.length())tls.setCACert(c.ca.c_str());else tls.setCACertBundle(ROBETIX_ROOTS);tls.setHandshakeTimeout(4);tls.setTimeout(5000);HTTPClient http;http.setConnectTimeout(3000);http.setTimeout(5000);http.setReuse(false);http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
+ VerifiedTLS tls;if(c.ca.length())tls.setCACert(c.ca.c_str());else tls.setCACert(ROBETIX_SERVICE_ROOTS);tls.setHandshakeTimeout(4);tls.setTimeout(5);HTTPClient http;http.setConnectTimeout(3000);http.setTimeout(5000);http.setReuse(false);http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
  if(!http.begin(tls,c.url+"/api/device?action="+action)){report("connection_lost","HTTPS client could not start");return false;}
  if(c.token.length())http.addHeader("Authorization","Bearer "+c.token);http.addHeader("Content-Type",job&&length?"image/jpeg":"application/json");
  if(job){http.addHeader("X-Event-Id",job->key);http.addHeader("X-Event-Time",String(job->epoch));http.addHeader("X-Event-Score",String(job->score));http.addHeader("X-Timezone-Offset",String(job->offset));http.addHeader("X-Test",job->test?"1":"0");}
- int code=http.POST(const_cast<uint8_t*>(body),length);lastHTTP=code;if(status)*status=code;bool ok=false;
+ int code=http.POST(const_cast<uint8_t*>(body),length);lastHTTP=code;if(code<0)Serial.printf("ROBETIX_TLS_DIAGNOSTIC: code=%d flags=%lu epoch=%lu\n",tls.result,(unsigned long)tls.verification,(unsigned long)Engine::epoch());if(status)*status=code;bool ok=false;
  LimitedResponse stream;if(code>0&&http.getSize()<=4096&&http.writeToStream(&stream)>=0){bool parsed=!deserializeJson(result,stream.text);ok=code>=200&&code<300&&parsed;}
- http.end();tls.stop();if(!ok){if(code==401&&!strcmp(action,"heartbeat")){xSemaphoreTake(mutex,portMAX_DELAY);pairVerified=false;nativeServiceReady=false;xSemaphoreGive(mutex);}String message=result["error"]|"";if(message.length()>120)message="Website request failed. Check the connection and try again.";report("connection_lost",message.length()?message.c_str():code==401||code==403?"Website rejected this camera. Check pairing and test website access.":code>0?"Website returned an unexpected response. Check the selected camera website.":"Internet connection failed. The camera will retry.");return false;}xSemaphoreTake(mutex,portMAX_DELAY);lastSuccess=millis()/1000;xSemaphoreGive(mutex);return true;
+ http.end();tls.stop();if(!ok){if(code==401&&!strcmp(action,"heartbeat")){xSemaphoreTake(mutex,portMAX_DELAY);pairVerified=false;nativeServiceReady=false;xSemaphoreGive(mutex);}String message=result["error"]|"";if(message.length()>120)message="Website request failed. Check the connection and try again.";report("connection_lost",message.length()?message.c_str():code==401||code==403?"Website rejected this camera. Check pairing and test website access.":code>0?"Website returned an unexpected response. Check the selected camera website.":tls.verification?"Secure connection to the website failed. Local viewing still works.":"Internet connection failed. The camera will retry.");return false;}xSemaphoreTake(mutex,portMAX_DELAY);lastSuccess=millis()/1000;xSemaphoreGive(mutex);return true;
 
 }
 static void task(void*){
  uint32_t nextHeartbeat=0,saveRetry=0,nextLiveTicket=0;bool needSync=true;Config c=copy();for(;;){
+  if(resetRequested){if(!resetDone){Config current=copy();StaticJsonDocument<256>response;int status=0;bool ok=current.token.isEmpty()||(Network::connected()&&request(current,"factory-reset",(const uint8_t*)"{}",2,response,nullptr,&status)&&response["credentials_revoked"]==true);resetVerified=ok||status==401;Live::close();resetDone=true;}delay(20);continue;}
   bool changed=dirty.exchange(false);if(changed){c=copy();needSync=true;nextHeartbeat=0;pairing.start(millis());}bool on=c.remote||c.wa;
   if(configured(c)&&(on||needSync)){
    if(c.token.isEmpty()&&c.code.length()){
@@ -95,6 +98,7 @@ static void task(void*){
 void begin(){nameRevision=prefs.getBool("nameSync",false)?1:0;Live::begin();mutex=xSemaphoreCreateMutex();frameMutex=xSemaphoreCreateMutex();queue=xQueueCreate(1,sizeof(Job));if(!mutex||!frameMutex||!queue)return;strlcpy(boot,randomHex(8).c_str(),sizeof(boot));String saved=prefs.getString("cloud","");if(saved.length()){DynamicJsonDocument d(6144);if(!deserializeJson(d,saved)){config.code=d["pair_code"]|"";config.requestId=d["pair_request"]|"";config.pairEpoch=d["pair_epoch"]|0;config.url=d["url"]|"";config.ca=d["ca"]|"";config.id=d["id"]|"";config.token=d["token"]|"";config.phone=d["phone"]|"";config.remote=d["remote"]|false;config.wa=d["whatsapp"]|false;config.photo=d["photo"]|true;config.optIn=d["opt_in"]|false;config.interval=d["interval"]|60;config.retentionDays=d["retention_days"]|7;config.timezoneMinutes=d["timezone_minutes"]|0;}}if(config.url.length()&&config.url!=ServiceOrigin::url&&(config.url==ROBETIX_LEGACY_ORIGIN||config.url==ROBETIX_CUSTOMER_ORIGIN||(config.url.startsWith("https://robetixvision-")&&config.url.endsWith("-robetix-s-projects.vercel.app")))){config.url=ServiceOrigin::url;config.ca="";credentialsPending=!save(config);}enabled=config.remote||config.wa;if(xTaskCreate(task,"cloud",12288,nullptr,1,nullptr)!=pdPASS){vQueueDelete(queue);queue=nullptr;enabled=false;report("unavailable","Cloud worker could not start");}}
 bool test(String&err){if(!mutex||!queue){err="Cloud worker unavailable";return false;}Config c=copy();if(!enabled||!c.wa||c.token.isEmpty()){err="Enable and pair WhatsApp first";return false;}if(Engine::paused()||!Camera::ready){err="Resume the camera first";return false;}if(pending||testPending.exchange(true)){err="A notification is already pending";return false;}return true;}
 void halt(){enabled=false;testPending=false;dirty=true;if(mutex){xSemaphoreTake(mutex,portMAX_DELAY);config=Config{};xSemaphoreGive(mutex);}}
+bool prepareReset(){if(!queue||!mutex)return false;resetDone=false;resetVerified=false;resetRequested=true;uint32_t start=millis();while(!resetDone&&millis()-start<20000)delay(25);return resetDone&&resetVerified;}
 void nameChanged(){if(!mutex)return;xSemaphoreTake(mutex,portMAX_DELAY);prefs.putBool("nameSync",true);nameRevision++;xSemaphoreGive(mutex);dirty=true;}
 bool wantsTest(){return testPending.load();}
 void offer(camera_fb_t*f,uint32_t event,uint32_t epoch,const char*,uint8_t score,int){

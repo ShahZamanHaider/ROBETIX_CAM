@@ -110,15 +110,26 @@ cloud synthetic-camera tests prove software paths, not physical hardware.
 
 USB command `DIAGNOSTICS` prints the same bounded, read-only status used by the
 authenticated dashboard. It contains no passwords, session cookies or device
-credentials. Existing `TRUST_DEVICE` recovery remains available.
+credentials. The consumer USB recovery page automates physical reset; legacy trust-code HTTP
+endpoints are retired (410).
 
-Physical checkpoint (2026-10-29): the connected original ESP32-CAM identified
-OV2640/native JPEG and about 4 MiB PSRAM. The Preview firmware uploaded and its
-flash hash verified without erasing NVS. SD initialization timed out (0x107) at
-20/10/5 MHz. The saved router was unavailable (Wi-Fi reason 201), so the camera
-had no router IP, no cloud handshake and zero remote frames. Home Wi-Fi setup
-and card inspection remain necessary; recording and physical remote viewing
-have not passed acceptance. Repeated synthetic cloud tests also encountered
-intermittent browser WebSocket handshake failures; a focused deployed test
-passed initial video, fresh-ticket producer reconnection and repeated Retry.
-Do not treat that as a sustained physical-device stability test.
+Physical checkpoint (2026-10-29): the original ESP32-CAM identified OV2640/native
+JPEG and about 4 MiB PSRAM. Development firmware uploads verified without erasing
+NVS. The router SSID contained a trailing space; preserving its exact bytes
+allowed DHCP, and the actual router IP served the local application. Browser
+testing decoded seven fresh VGA JPEGs and confirmed/restored flashlight output.
+The radio signal was weak. USB network probes reached the gateway, Internet and
+service TCP port. The board clock matched UTC, but HTTPS certificate verification
+still failed (native verifier NOT_TRUSTED, flag 8); the older bundle also failed.
+The selected native PEM store is a diagnostic change, not a verified physical
+remote-video fix. No insecure fallback is present. The exact remaining chain
+failure needs the connected board's peer-chain diagnostics.
+
+SD initialization timed out (0x107) at 20/10/5 MHz. No format was attempted.
+Physical remote JPEG, SD recording and long-duration acceptance have not passed.
+The USB board subsequently disappeared from this computer. New consumer/reset
+behavior is compiled and browser/host tested, not physically reset-tested on the
+owner's provisioned camera. Do not destroy its saved settings merely to label a
+test passed. Synthetic cloud tests also encountered intermittent WebSocket
+handshake failures; focused video/reconnect/Retry tests passed. Those are not
+sustained physical-device tests.

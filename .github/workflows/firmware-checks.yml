@@ -16,7 +16,9 @@ jobs:
           python-version: '3.12'
       - run: pip install platformio==6.2.0
       - run: python tools/test-preview-config.py
+      - run: python tools/build-service-roots.py --check
       - run: g++ -std=c++17 tools/test_live_lease.cpp -o /tmp/rv-lease && /tmp/rv-lease
+      - run: g++ -std=c++17 tools/test_factory_policy.cpp -o /tmp/rv-factory && /tmp/rv-factory
       - run: g++ -std=c++17 tools/test_network.cpp -o /tmp/rv-network && /tmp/rv-network
       - run: g++ -std=c++17 tools/test_setup_policy.cpp -o /tmp/rv-setup && /tmp/rv-setup
       - run: pio run
