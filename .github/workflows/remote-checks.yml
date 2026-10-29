@@ -23,6 +23,7 @@ jobs:
       - run: git diff --exit-code -- remote/public/i18n.js
       - run: npm --prefix remote test
       - run: python tools/test_build_identity.py
+      - run: node tools/test-cloud-switch.cjs
       - run: node tools/test-local-access.cjs
       - run: node tools/test-local-proxy.mjs
       - run: node tools/test-i18n.cjs
@@ -49,6 +50,7 @@ jobs:
       - run: node tools/test-recipients-ui.cjs
       - run: node tools/test-ui.cjs
       - run: node tools/test-setup-ui.cjs
+      - run: node tools/test-two-address.cjs
       - run: node tools/test-local-trust.cjs
       - run: node tools/test-usb-recovery.cjs
       - run: node tools/test-remote-setup.cjs

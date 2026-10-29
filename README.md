@@ -20,7 +20,13 @@ Pinned environment: PlatformIO Espressif32 **6.11.0**, Arduino-ESP32 **2.0.17**,
 
 Replace COMx with the actual serial port. If your adapter requires it, hold GPIO0 low during upload reset; release it and reset for normal use. Power off before reseating a camera ribbon or card. Use a stable regulated 5 V supply and short cable. Brownout protection remains enabled.
 
-First use: join the unique **ROBETIX-xxxxxx** Wi-Fi using the password printed on your private setup card (prototype/factory retrieval: `tools/setup-card.py COM_PORT` with PlatformIO Python and Node; saves a Windows DPAPI-encrypted `.private/*.dpapi` card, never a plaintext password note), open **http://192.168.4.1**, enter the private setup-card credential once and remember your trusted browser, then select AP or STA and set your Wi-Fi credentials through the web page. STA joins a 2.4 GHz router while retaining the configured recovery hotspot. `http://robetix.local` works where mDNS is supported; use the actual IP otherwise. Existing provisioning is retained. Existing administrator passwords remain supported; fresh setup does not require an extra chosen password. See docs/PERMANENT_SITE.md for access and recovery.
+## Everyday access — two addresses
+
+- Without Internet: join **ROBETIX-VISION-XX** using the private eight-digit factory Wi-Fi password, then open **http://192.168.4.1**. Home opens without another password or code.
+- With Internet: open **https://vision.robetix.com**. Your remembered private cloud session opens your cameras. Pair each camera once using Add Camera and its local Settings.
+
+See [the customer guide](docs/CUSTOMER_GUIDE.md). Build commands and the remaining documents are engineering/service references, not customer onboarding instructions. Existing installed Wi-Fi credentials are preserved on upgrade.
+
 
 ## Current functionality
 

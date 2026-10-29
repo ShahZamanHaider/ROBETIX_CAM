@@ -822,5 +822,14 @@
   "Camera connection needs attention. Open the camera page again.": "کیمرے سے رابطہ چیک کریں۔ کیمرے کا صفحہ دوبارہ کھولیں۔",
   "Camera connection restored. Please try that action again.": "کیمرے سے رابطہ بحال ہوگیا۔ وہ کام دوبارہ کریں۔",
   "Open this camera directly at its local address, then try again.": "کیمرے کا مقامی پتہ براہ راست کھولیں، پھر کوشش کریں۔",
-  "Camera status is busy. Please try again.": "کیمرا مصروف ہے۔ دوبارہ کوشش کریں۔"
+  "Camera status is busy. Please try again.": "کیمرا مصروف ہے۔ دوبارہ کوشش کریں۔",
+  "For online viewing, open https://vision.robetix.com. For local viewing, stay on camera Wi-Fi and open http://192.168.4.1.": "آن لائن دیکھنے کے لیے https://vision.robetix.com کھولیں۔ مقامی طور پر دیکھنے کے لیے کیمرے کے وائی فائی سے جڑے رہیں اور http://192.168.4.1 کھولیں۔",
+  "For local viewing, join camera Wi-Fi and open http://192.168.4.1. For online viewing, open https://vision.robetix.com.": "مقامی طور پر دیکھنے کے لیے کیمرے کے وائی فائی سے جڑ کر http://192.168.4.1 کھولیں۔ آن لائن دیکھنے کے لیے https://vision.robetix.com کھولیں۔",
+  "Camera Wi-Fi stays available for local viewing without Internet.": "انٹرنیٹ کے بغیر مقامی ویڈیو دیکھنے کے لیے کیمرے کا وائی فائی دستیاب رہتا ہے۔",
+  "Online viewing is ready. Opening your camera online…": "آن لائن ویڈیو دستیاب ہے۔ آپ کا کیمرا آن لائن کھل رہا ہے…",
+  "Keep using locally": "یہیں مقامی طور پر استعمال کریں",
+  "Open online app": "آن لائن ایپ کھولیں",
+  "Use camera Wi-Fi without Internet": "انٹرنیٹ کے بغیر کیمرے کا وائی فائی استعمال کریں",
+  "This camera is not available in this account.": "یہ کیمرا اس اکاؤنٹ میں دستیاب نہیں ہے۔",
+  "On your phone, join the Wi-Fi printed on the camera setup card. Open http://192.168.4.1. No other password or code is needed.": "فون پر کیمرے کے سیٹ اپ کارڈ والا وائی فائی جوڑیں۔ http://192.168.4.1 کھولیں۔ کسی اور پاس ورڈ یا کوڈ کی ضرورت نہیں۔"
 }

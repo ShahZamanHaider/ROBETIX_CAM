@@ -21,7 +21,7 @@ env.Prepend(CPPPATH=[str(generated)])
 html = (root / "data/index.html").read_text(encoding="utf-8").replace('/* @build-info */null',json.dumps({k:info[k]for k in ['version','source','local_protocol']},separators=(',',':')))
 
 html=html.replace("/* @design-tokens */",(root/"data/design-tokens.css").read_text(encoding="utf-8"))
-for asset in ["i18n.js","alarm.js","setup.js","local-access.js"]:
+for asset in ["i18n.js","alarm.js","setup.js","local-access.js","cloud-switch.js"]:
     raw = (root / "data" / asset).read_text(encoding="utf-8-sig")
     source = raw
     source = source.replace("/* @translations */", json.dumps(json.loads((root / "data/ur.json").read_text(encoding="utf-8")), ensure_ascii=False, separators=(",", ":")))
