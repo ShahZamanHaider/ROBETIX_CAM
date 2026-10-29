@@ -7,6 +7,8 @@
 #include "Ui.h"
 #include "Engine.h"
 #include "Auth.h"
+#include "LocalOriginPolicy.h"
+#include "LocalSocketPolicy.h"
 #include "Events.h"
 #include "Motion.h"
 #include "Cloud.h"
@@ -45,20 +47,35 @@ static bool authorized(httpd_req_t*r,String *token=nullptr) {
 }
 // Require both the AP interface and an actual associated station. A router-side
 // request, forged Host header or client IP by itself cannot establish trust.
+static bool socketIPv4(httpd_req_t*r,bool local,uint32_t&ip){
+ sockaddr_storage address={};socklen_t length=sizeof(address);int fd=httpd_req_to_sockfd(r);
+ int result=local?getsockname(fd,(sockaddr*)&address,&length):getpeername(fd,(sockaddr*)&address,&length);
+ if(result)return false;
+ if(address.ss_family==AF_INET&&length>=sizeof(sockaddr_in)){ip=((const sockaddr_in*)&address)->sin_addr.s_addr;return true;}
+#if LWIP_IPV6
+ if(address.ss_family==AF_INET6&&length>=sizeof(sockaddr_in6))return LocalSocketPolicy::mappedIpv4(((const sockaddr_in6*)&address)->sin6_addr.s6_addr,ip);
+#endif
+ return false;
+}
+static bool throughHotspot(httpd_req_t*r){
+ uint32_t local=0;return socketIPv4(r,true,local)&&IPAddress(local)==WiFi.softAPIP();
+}
 static bool cameraWifi(httpd_req_t*r){
- sockaddr_in local={},peer={};socklen_t n=sizeof(local);int fd=httpd_req_to_sockfd(r);
- if(getsockname(fd,(sockaddr*)&local,&n)||IPAddress(local.sin_addr.s_addr)!=WiFi.softAPIP())return false;
- n=sizeof(peer);if(getpeername(fd,(sockaddr*)&peer,&n))return false;
+ uint32_t peer=0;if(!throughHotspot(r)||!socketIPv4(r,false,peer))return false;
  wifi_sta_list_t stations={};esp_netif_sta_list_t addresses={};
  if(esp_wifi_ap_get_sta_list(&stations)!=ESP_OK||esp_netif_get_sta_list(&stations,&addresses)!=ESP_OK)return false;
- for(int i=0;i<addresses.num;i++)if(addresses.sta[i].ip.addr==peer.sin_addr.s_addr)return true;
+ for(int i=0;i<addresses.num;i++)if(addresses.sta[i].ip.addr==peer)return true;
  return false;
 }
 static bool sameCameraOrigin(httpd_req_t*r){
- char host[80]={},origin[96]={};if(httpd_req_get_hdr_value_str(r,"Host",host,sizeof(host))!=ESP_OK)return false;
+ char host[80]={},origin[96]={},referer[192]={},site[32]={};if(httpd_req_get_hdr_value_str(r,"Host",host,sizeof(host))!=ESP_OK)return false;
  String h=host;bool known=h=="192.168.4.1"||h==WiFi.localIP().toString()||h=="robetix.local";
  if(!known)return false;
- return httpd_req_get_hdr_value_str(r,"Origin",origin,sizeof(origin))==ESP_OK&&String(origin)=="http://"+h;
+ // Some local/captive browsers omit Origin. Accept only another positive
+ // same-origin browser signal, while retaining AP-station verification.
+ if(httpd_req_get_hdr_value_len(r,"Origin")>=sizeof(origin))return false;
+ httpd_req_get_hdr_value_str(r,"Origin",origin,sizeof(origin));httpd_req_get_hdr_value_str(r,"Referer",referer,sizeof(referer));httpd_req_get_hdr_value_str(r,"Sec-Fetch-Site",site,sizeof(site));
+ String expected="http://"+h;return LocalOriginPolicy::permit(expected.c_str(),origin,referer,site);
 }
 static bool body(httpd_req_t*r,JsonDocument&d) {
   if(r->content_len<=0 || r->content_len>768) return false;
@@ -75,7 +92,7 @@ static esp_err_t handler(httpd_req_t*r) {
   String uri=r->uri;int question=uri.indexOf('?');if(question>=0)uri=uri.substring(0,question);
   if(r->method==HTTP_GET&&(uri=="/generate_204"||uri=="/hotspot-detect.html"||uri=="/connecttest.txt"||uri=="/ncsi.txt")){httpd_resp_set_status(r,"302 Found");httpd_resp_set_hdr(r,"Location","http://192.168.4.1/");return httpd_resp_send(r,"",0);}
   if(r->method==HTTP_GET && uri=="/") {httpd_resp_set_type(r,"text/html");httpd_resp_set_hdr(r,"Cache-Control","no-store");httpd_resp_set_hdr(r,"X-Frame-Options","DENY");return httpd_resp_send(r,UI,HTTPD_RESP_USE_STRLEN);}
-  if(r->method==HTTP_GET && uri=="/api/session") {StaticJsonDocument<192>d;d["device"]=passwordHash("public-device-id").substring(0,16);d["setup"]=false;d["password_enabled"]=false;d["authenticated"]=authorized(r);return json(r,d);}
+  if(r->method==HTTP_GET && uri=="/api/session") {StaticJsonDocument<512>d;d["device"]=passwordHash("public-device-id").substring(0,16);d["setup"]=false;d["password_enabled"]=false;d["authenticated"]=authorized(r);d["local_protocol"]=1;d["camera_wifi"]=cameraWifi(r);d["interface"]=throughHotspot(r)?"hotspot":"router";d["hotspot_name"]=WiFi.softAPSSID();return json(r,d);}
   if(r->method==HTTP_POST && !localPost(r)) return reply(r,"{\"error\":\"JSON required\"}","415 Unsupported Media Type");
   if(r->method==HTTP_POST&&(uri=="/api/login"||uri=="/api/provision"||uri=="/api/trust"||uri=="/api/recover"||uri=="/api/authorize"))return reply(r,"{\"error\":\"Connect to the camera Wi-Fi to authorize this browser.\"}","410 Gone");
   if(r->method==HTTP_POST&&uri=="/api/hotspot-session"){

@@ -5,6 +5,24 @@ Production and existing Supabase accounts/data are unchanged. No SQL migration.
 
 ## Normal local access
 
+The access check reads sockaddr_storage and handles native IPv4 plus IPv4-mapped
+IPv6 sockets. The pinned ESP-IDF HTTP listener is dual-stack; interpreting its
+IPv6 sockaddr as sockaddr_in incorrectly rejects camera-hotspot clients. Both
+local and peer addresses must be decoded before checking the AP interface and
+associated-station DHCP list. Native unmapped IPv6 does not grant hotspot trust.
+
+Same-origin POST proof accepts a matching Origin, or a matching same-camera
+Referer / same-origin Fetch Metadata only when Origin is absent. A supplied
+mismatching or null Origin is rejected. No router-network auto-authorization is
+introduced. The UI's Try again button retries the actual session exchange without
+reloading the same blocked page. It reports blocked cookies, a localhost HTML
+server without camera APIs, and missing camera access explicitly; the header no
+longer remains Connecting on an access error. Localhost is the computer, not the
+ESP32's camera address.
+
+USB recovery links were removed from the customer local interface as requested.
+The separate physical service utility is retained without a customer-facing link.
+
 Join the password-protected camera hotspot and open http://192.168.4.1. The page
 POSTs a same-origin bootstrap automatically. Firmware verifies the receiving AP
 interface and the peer against the Wi-Fi driver's associated-station/DHCP list;
@@ -102,3 +120,12 @@ physical certificate-chain repair and fresh remote JPEG, working SD card/AVI,
 repeated motion and long-duration mixed recording/network/memory tests. Mobile
 background audio remains subject to browser/OS restrictions. No current hardware
 FPS, audible-speaker, SD or remote-video pass is inferred from simulated tests.
+
+Physical access checkpoint: a real ROBETIX-VISION-27 hotspot was reachable using
+the owner-requested password rule. The installed firmware returned 403 to the
+browser's automatic hotspot authorization and also to a request with explicit
+same-camera Origin; missing Origin alone does not explain that failure. The
+IPv4-only socket checks were incompatible with the pinned dual-stack server.
+The computer's original Wi-Fi was restored after both diagnostic attempts.
+No reset, router-settings change or firmware upload was performed. The repaired
+socket parsing still requires upload and a fresh physical access test.

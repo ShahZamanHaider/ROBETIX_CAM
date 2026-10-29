@@ -85,7 +85,7 @@
   "Camera Paused": "کیمرہ رکا ہوا ہے",
   "Camera Offline": "کیمرے سے رابطہ نہیں ہے",
   "Camera is unavailable": "کیمرہ دستیاب نہیں ہے",
-  "Camera unavailable": "کیمرہ دستیاب نہیں ہے",
+  "Camera unavailable": "کیمرا دستیاب نہیں ہے",
   "Camera paused. Resume it in Settings.": "کیمرہ رکا ہوا ہے۔ سیٹنگز سے دوبارہ چلائیں۔",
   "Pausing stops recording and movement monitoring.": "کیمرہ روکنے سے ریکارڈنگ اور حرکت کی نگرانی رک جاتی ہے۔",
   "Camera resumed": "کیمرہ دوبارہ چل رہا ہے",
@@ -798,5 +798,16 @@
   "Another nearby camera has the same Wi-Fi name. Choose a different camera Wi-Fi name in Settings.": "پاس کے دوسرے کیمرے کا وائی فائی نام بھی یہی ہے۔ سیٹنگز میں اپنے کیمرے کا وائی فائی نام بدلیں۔",
   "Secure connection to the website failed. Local viewing still works.": "ویب سائٹ سے محفوظ رابطہ نہیں ہو سکا۔ کیمرا مقامی طور پر کام کر رہا ہے۔",
   "Join the camera Wi-Fi once to authorize a browser. Keep your setup label private.": "براؤزر کو اجازت دینے کے لیے کیمرے کے وائی فائی سے ایک بار جڑیں۔ اپنا سیٹ اپ لیبل نجی رکھیں۔",
-  "Forget this browser": "اس براؤزر کی رسائی ختم کریں"
+  "Forget this browser": "اس براؤزر کی رسائی ختم کریں",
+  "Join the camera Wi-Fi, then tap Try again. No other password or code is needed.": "کیمرے کے وائی فائی سے جڑیں، پھر دوبارہ کوشش کریں دبائیں۔ کسی اور پاس ورڈ یا کوڈ کی ضرورت نہیں۔",
+  "Open camera Wi-Fi address": "کیمرے کا وائی فائی پتہ کھولیں",
+  "Localhost is this computer. To use the real camera, connect to its Wi-Fi and open its camera address.": "لوکل ہوسٹ اسی کمپیوٹر کا پتہ ہے۔ اصل کیمرا استعمال کرنے کے لیے اس کے وائی فائی سے جڑ کر کیمرے کا پتہ کھولیں۔",
+  "This browser is not trusted on home Wi-Fi yet. Join the camera Wi-Fi once, then use Open camera on home Wi-Fi from that camera page.": "گھر کے وائی فائی پر اس براؤزر کو ابھی اجازت نہیں ملی۔ ایک بار کیمرے کے وائی فائی سے جڑیں، پھر اسی صفحے سے گھر کے وائی فائی پر کیمرا کھولیں۔",
+  "The camera service did not reply. Check the camera address and try again.": "کیمرے کی سروس نے جواب نہیں دیا۔ کیمرے کا پتہ دیکھ کر دوبارہ کوشش کریں۔",
+  "Your browser did not remember camera access. Allow cookies for this camera and try again.": "براؤزر کیمرے کی رسائی یاد نہیں رکھ سکا۔ کیمرے کے لیے کوکیز کی اجازت دے کر دوبارہ کوشش کریں۔",
+  "Access needed": "رسائی درکار ہے",
+  "Checking camera access…": "کیمرے سے رابطہ چیک ہو رہا ہے…",
+  "Stay connected to the camera Wi-Fi and tap Try again. If access is still refused, disconnect and reconnect to that Wi-Fi.": "کیمرے کے وائی فائی سے جڑے رہیں اور دوبارہ کوشش کریں دبائیں۔ رسائی نہ ملے تو اسی وائی فائی سے دوبارہ جڑیں۔",
+  "The camera has not confirmed this Wi-Fi connection yet. Reconnect to camera Wi-Fi and try again.": "کیمرا ابھی اس وائی فائی رابطے کی تصدیق نہیں کر سکا۔ کیمرے کے وائی فائی سے دوبارہ جڑ کر کوشش کریں۔",
+  "Try again": "دوبارہ کوشش کریں"
 }
