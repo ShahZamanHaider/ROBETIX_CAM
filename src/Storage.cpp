@@ -4,6 +4,7 @@
 namespace Storage {
 std::atomic<bool> available{false};SemaphoreHandle_t operationMutex;
 static SemaphoreHandle_t statsMutex;static uint64_t total=0,used=0;static char lastError[160]={};static uint32_t nextSequence=0,unfinished=0;
+static int mountKHz=0,mountAttempts=0,cardType=0;static bool mounted=false;
 static constexpr size_t SCAN_LIMIT=4096,PAGE_SIZE=12;
 void fail(const char*s){xSemaphoreTake(statsMutex,portMAX_DELAY);strlcpy(lastError,s,sizeof(lastError));xSemaphoreGive(statsMutex);}
 void refresh(){if(!available)return;uint64_t t=SD_MMC.totalBytes(),u=SD_MMC.usedBytes();xSemaphoreTake(statsMutex,portMAX_DELAY);total=t;used=u;xSemaphoreGive(statsMutex);}
@@ -20,7 +21,7 @@ static String baseName(const char*p){String s=p;int slash=s.lastIndexOf('/');ret
 void begin(){
  operationMutex=xSemaphoreCreateMutex();statsMutex=xSemaphoreCreateMutex();if(!operationMutex||!statsMutex){available=false;return;}
  pinMode(4,OUTPUT);digitalWrite(4,LOW);
- for(int frequency:{SDMMC_FREQ_DEFAULT,10000,5000}){available=SD_MMC.begin("/sdcard",true,false,frequency,5)&&SD_MMC.cardType()!=CARD_NONE;if(available){Serial.printf("SD ready: 1-bit, %d kHz, card type %d, capacity %llu bytes\n",frequency,SD_MMC.cardType(),SD_MMC.cardSize());break;}Serial.printf("SD mount failed at %d kHz; no formatting attempted\n",frequency);SD_MMC.end();delay(100);}
+ for(int frequency:{SDMMC_FREQ_DEFAULT,10000,5000}){mountAttempts++;mounted=SD_MMC.begin("/sdcard",true,false,frequency,5);cardType=mounted?SD_MMC.cardType():0;available=mounted&&cardType!=CARD_NONE;mountKHz=frequency;if(available){Serial.printf("SD ready: 1-bit, %d kHz, card type %d, capacity %llu bytes\n",frequency,SD_MMC.cardType(),SD_MMC.cardSize());break;}Serial.printf("SD mount failed at %d kHz; no formatting attempted\n",frequency);SD_MMC.end();delay(100);}
  if(available)for(const char*dir:{"/robetix","/robetix/videos","/robetix/photos"})if(!SD_MMC.exists(dir)&&!SD_MMC.mkdir(dir))available=false;
  if(!available){fail("Memory card unavailable. Power off, check the FAT32 card, then restart.");SD_MMC.end();return;}
  nextSequence=prefs.getUInt("fileSeq",0);
@@ -74,6 +75,6 @@ bool list(const String&kind,uint32_t before,JsonObject out,uint32_t from,uint32_
  out["next"]=count==PAGE_SIZE?entries[count-1].id:0;out["scan_limited"]=truncated;return true;
 }
 bool remove(const String&name,const String&kind){String p=path(name,kind);if(p.isEmpty()||!SD_MMC.exists(p))return false;bool ok=SD_MMC.remove(p);if(ok)refresh();else fail("Could not delete file");return ok;}
-void status(JsonObject o){if(!statsMutex){o["available"]=false;return;}xSemaphoreTake(statsMutex,portMAX_DELAY);o["available"]=available.load();o["total"]=total;o["used"]=used;o["free"]=total>used?total-used:0;o["error"]=lastError;o["unfinished_at_boot"]=unfinished;xSemaphoreGive(statsMutex);}
+void status(JsonObject o){if(!statsMutex){o["available"]=false;return;}xSemaphoreTake(statsMutex,portMAX_DELAY);o["available"]=available.load();o["total"]=total;o["used"]=used;o["free"]=total>used?total-used:0;o["error"]=lastError;o["unfinished_at_boot"]=unfinished;o["mode"]="1-bit";o["mount_attempts"]=mountAttempts;o["frequency_khz"]=mountKHz;o["card_type"]=cardType;o["mount_succeeded"]=mounted;xSemaphoreGive(statsMutex);}
 }
 

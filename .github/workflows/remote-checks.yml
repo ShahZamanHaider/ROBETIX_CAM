@@ -20,8 +20,12 @@ jobs:
           node-version: '22'
       - run: node tools/check-secrets.mjs --history
       - run: npm --prefix remote run build
-      - run: git diff --exit-code -- remote/public/i18n.js
+      - run: git diff --exit-code -- remote/public/i18n.js remote/public/offline-cache.js
       - run: npm --prefix remote test
+      - run: python tools/test_build_identity.py
+      - run: node tools/test-cloud-switch.cjs
+      - run: node tools/test-local-access.cjs
+      - run: node tools/test-local-proxy.mjs
       - run: node tools/test-i18n.cjs
       - run: npm install --prefix .pio/sql-test @electric-sql/pglite@0.5.12 --no-audit --no-fund
       - run: node tools/test-recipients-sql.mjs
@@ -41,11 +45,15 @@ jobs:
       - run: .pio/ui-test/node_modules/.bin/playwright install --with-deps chromium
       - run: node tools/test-auth-ui.mjs
       - run: node tools/test-live-ui.mjs
+      - run: node tools/test-unified-app.mjs
+      - run: node tools/test-camera-controls.mjs
       - run: node tools/test-remote-ui.cjs
       - run: node tools/test-recipients-ui.cjs
       - run: node tools/test-ui.cjs
       - run: node tools/test-setup-ui.cjs
+      - run: node tools/test-two-address.cjs
       - run: node tools/test-local-trust.cjs
+      - run: node tools/test-usb-recovery.cjs
       - run: node tools/test-remote-setup.cjs
 
   relay:

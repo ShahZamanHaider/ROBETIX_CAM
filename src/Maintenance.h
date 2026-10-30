@@ -4,6 +4,7 @@
 #include <Arduino.h>
 namespace Maintenance {
 void begin();void policy(const AppOptions&);
+void pauseForReset();
 bool find(const String&kind,uint32_t from,uint32_t to,String&error);
 bool confirm(const String&token,String&error);void status(JsonObject);
 }

@@ -16,16 +16,47 @@ static bool validSize(int n) { return (!info||n<=info->max_size)&&(n==FRAMESIZE_
 bool configure(int size,int quality,int brightness,int contrast,int saturation,int mirror,int flip,bool persist) {
   if(!ready || !validSize(size) || (!psramFound() && size!=FRAMESIZE_QVGA) || quality<10 || quality>40 || abs(brightness)>2 || abs(contrast)>2 || abs(saturation)>2 || mirror<0 || mirror>1 || flip<0 || flip>1) return false;
   sensor_t *s=esp_camera_sensor_get();
-  // Reinitialize on resolution changes: driver buffer sizing follows initial resolution.
+   // Intentional size changes still reallocate the driver frame buffer. Unlike
+   // the old implementation, failure restores the last working camera setup.
+   // Automatic viewer transitions no longer request a size change (Engine.cpp).
   if(size!=s->status.framesize) {
-    camera_config_t c; esp_camera_deinit(); ready=false;
     extern camera_config_t config;
-    c=config; c.frame_size=(framesize_t)size; c.jpeg_quality=quality;
-    esp_err_t e=esp_camera_init(&c);
-    if(e!=ESP_OK) { error="Camera reinit failed; reboot for safe VGA defaults"; return false; }
+     const camera_config_t previous=config;
+     camera_config_t requested=previous;
+     requested.frame_size=(framesize_t)size;
+     requested.jpeg_quality=quality;
+     esp_camera_deinit();
+     ready=false;
+     esp_err_t e=esp_camera_init(&requested);
+     if(e!=ESP_OK){
+       Serial.printf("ROBETIX_CAMERA: requested size %d failed 0x%x; restoring prior size %d\n",
+                     size,unsigned(e),int(previous.frame_size));
+       esp_camera_deinit();
+       delay(80);
+       esp_err_t restore=esp_camera_init(&previous);
+       s=restore==ESP_OK?esp_camera_sensor_get():nullptr;
+       if(s && nativeSensor(s)){
+         ready=true;
+         error="Picture size change failed; previous camera mode restored";
+       }else{
+         ready=false;
+         error="Camera reinit and recovery failed; check power and reboot";
+         Serial.printf("ROBETIX_CAMERA: restore failed 0x%x\n",unsigned(restore));
+       }
+       return false;
+     }
     s=esp_camera_sensor_get();
-    if(!s || !nativeSensor(s)) { esp_camera_deinit(); error="This camera module is not supported for native JPEG"; return false; }
-    config=c; ready=true;
+     if(!s || !nativeSensor(s)){
+       esp_camera_deinit();
+       delay(80);
+       esp_err_t restore=esp_camera_init(&previous);
+       s=restore==ESP_OK?esp_camera_sensor_get():nullptr;
+       ready=s && nativeSensor(s);
+       error=ready?"Unsupported camera mode; previous mode restored":"Camera sensor recovery failed; reboot";
+       return false;
+     }
+     config=requested;
+     ready=true;
   }
   int rc=s->set_quality(s,quality) | s->set_brightness(s,brightness) | s->set_contrast(s,contrast) | s->set_saturation(s,saturation) | s->set_hmirror(s,mirror) | s->set_vflip(s,flip);
   if(rc) return false;
