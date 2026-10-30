@@ -136,14 +136,21 @@ static void task(void*){
    else if(c.action==Action::Restart){stopRecording();say("Restarting camera");completed.done(true,"Camera restarting");completed.finish();delay(1500);ESP.restart();}
   }
   uint32_t previewDeadline=previewUntil.load();bool view=previewDeadline&&(int32_t)(previewDeadline-millis())>0;if(previewDeadline&&!view)previewUntil.compare_exchange_strong(previewDeadline,0);
-  bool remoteView=Live::viewing(),remoteDue=Live::wanted();
+   // Capture from the current sensor mode for remote viewers, even without a local client.
+   // Avoid automatic resolution changes that deinit/reinit the JPEG driver under load.
+   bool remoteDue=Live::wanted();
   bool testingMotion=Motion::testing();bool scheduleOpen=!opts.schedule||recordingWindow(epoch(),opts.timezoneMinutes,opts.scheduleStart,opts.scheduleEnd,opts.scheduleDays);
   if(recording&&recordOrigin&& !scheduleOpen)stopRecording();
   if(!recording&&!privacy&&!Camera::busy()&&scheduleOpen&&(int32_t)(millis()-nextAutoAt)>=0&&(opts.recordingMode==1||(opts.recordingMode==2&&!testingMotion&&Motion::active(opts.motionSeconds*1000UL)))){nextAutoAt=millis()+30000;startRecording(opts.recordingMode);}
   bool monitor=Motion::available()&&(opts.motion||opts.recordingMode==2||testingMotion);
-  if(!recording&&!privacy&&!Camera::busy()&&Camera::ready){
-   if(idleLow&&(view||(!monitor&&!remoteView)||(remoteView&&remoteTier!=Live::profile())||(!remoteView&&remoteTier>=0))){xSemaphoreTake(Camera::mutex,portMAX_DELAY);restoreIdle();xSemaphoreGive(Camera::mutex);}
-   else if((monitor||remoteView)&&!view&&!idleLow){xSemaphoreTake(Camera::mutex,portMAX_DELAY);viewingSettings=esp_camera_sensor_get()->status;auto&s=viewingSettings;remoteTier=remoteView?Live::profile():-1;framesize_t remoteSize=remoteTier<=0?FRAMESIZE_QVGA:remoteTier==1?FRAMESIZE_VGA:FRAMESIZE_SVGA;idleLow=Camera::configure(psramFound()?remoteSize:FRAMESIZE_QVGA,remoteTier<=0?24:20,s.brightness,s.contrast,s.saturation,s.hmirror,s.vflip,false);xSemaphoreGive(Camera::mutex);clearFrame();Motion::rebase();}
+   // A fixed sensor mode is shared by local preview, cloud viewing and motion detection.
+   // Auto-switching QVGA/VGA caused esp_camera_deinit/init on every viewer transition;
+   // a failed reinit permanently disabled the camera until reboot. Explicit user
+   // camera settings and recording profiles still use their existing code paths.
+   if(idleLow && !recording && !privacy && !Camera::busy() && Camera::ready){
+    xSemaphoreTake(Camera::mutex,portMAX_DELAY);
+    restoreIdle();
+    xSemaphoreGive(Camera::mutex);
   }
   bool motionDue=monitor&&(int32_t)(millis()-nextMotionAt)>=0;
   bool recordDue=recording&&(int32_t)(millis()-nextRecordAt)>=0;

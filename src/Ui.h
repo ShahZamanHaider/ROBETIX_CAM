@@ -102,7 +102,7 @@ class LocalAccessSession{
 globalThis.LocalAccessSession=LocalAccessSession;
 })();
 
-const LOCAL_BUILD={"version":"2.4.1","source":"f77f5aba6d8043bf0a3c043797f0ec428a78b0d7c632130568672def0d2093f2","local_protocol":2};
+const LOCAL_BUILD={"version":"2.4.1","source":"e8f59a7bdf96ecf20a4e09ccc9379f3f8fc023b7a3783fa6bb48ef908e12586e","local_protocol":2};
 const $=id=>document.getElementById(id),cameraFields=['size','quality','brightness','contrast','saturation','mirror','flip'];let accessBusy=false,lastAccessSession=null,accessReady=false,recoveryBudget=0;let currentPage='home',state=null,initialized=false,networkInitialized=false,networkChanging=false,scanning=false,toastTimer,lastMessage=0,fileKind='videos',fileCursor=0,nextCursor=0,previewBusy=false,previewId=0,lastFrameAt=0,previewUrl='',previewAbort=null,online=false;let localWrites=0,cloudCurrent=null,cloudChecked=0,customerInteracted=false;
 function mediaOrigin(){return window.ROBETIX_LOCAL_MEDIA_ORIGIN||('http://'+location.hostname+':81')}
 function icon(name){return '<svg class="icon"><use href="#i-'+name+'"/></svg>'}

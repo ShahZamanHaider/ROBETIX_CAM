@@ -7,7 +7,14 @@ export const config={api:{bodyParser:false}};
 async function execute(id,uid,request){
  const body=JSON.stringify(request),proof=liveTicket(id,'rpc',{subject:uid,request_hash:hash(body)});
  let r;try{r=await fetch(env('LIVE_RELAY_URL')+'/rpc/'+id,{method:'POST',headers:{Authorization:'Bearer '+proof.ticket,'Content-Type':'application/json'},body,redirect:'error',signal:AbortSignal.timeout(13000)})}catch{fail(504,'No device confirmation received. Check camera status before trying again.')}
- const reader=r.body.getReader(),parts=[];let count=0;for(;;){const chunk=await reader.read();if(chunk.done)break;count+=chunk.value.byteLength;if(count>8192){await reader.cancel();fail(502,'Camera response is too large')}parts.push(Buffer.from(chunk.value))}let value;try{value=JSON.parse(Buffer.concat(parts).toString())}catch{fail(502,'Camera connection failed')}
+ const reader=r.body.getReader(),parts=[];let count=0;for(;;){const chunk=await reader.read();if(chunk.done)break;count+=chunk.value.byteLength;if(count>8192){await reader.cancel();fail(502,'Camera response is too large')}parts.push(Buffer.from(chunk.value))}let value;try{value=JSON.parse(Buffer.concat(parts).toString())}catch {
+  console.error('ROBETIX_RPC:', {
+    status: r.status,
+    contentType: r.headers.get('content-type')
+  });
+
+  fail(502, `Camera relay returned HTTP ${r.status}`);
+}
  if(!r.ok)fail(r.status>=400&&r.status<600?r.status:502,value.error||'Camera command failed');
  if(value.id!==request.id||value.ok!==true)fail(502,'Camera did not confirm this command');return value.data;
 }
