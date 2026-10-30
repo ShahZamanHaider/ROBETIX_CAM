@@ -9,5 +9,8 @@ struct NetworkPolicy {
  void started(uint32_t now){attempting=true;deadline=now+45000;}
  bool timedOut(uint32_t now)const{return attempting&&due(now,deadline);}
  void failed(uint32_t now){attempting=false;next=now+backoff;backoff=backoff<45000?backoff*2:90000;}
+ // A Wi-Fi driver disconnect is a completed attempt, not something to leave
+ // active until the association deadline expires.
+ void disconnected(uint32_t now){failed(now);}
  void connected(uint32_t now){attempting=false;backoff=5000;next=now+5000;}
 };

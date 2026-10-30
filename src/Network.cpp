@@ -11,6 +11,7 @@ struct Config{String ssid,password,apSsid,apPassword;bool hotspot=true,ready=fal
 static Config config;static SemaphoreHandle_t configMutex;static NetworkPolicy retry;
 std::atomic<uint32_t> reconnects{0};static std::atomic<uint32_t> applyAt{0};
 static std::atomic<bool> routerEnabled{false},associated{false};static std::atomic<uint16_t> reason{0};
+static std::atomic<uint32_t> disconnectAt{0},attemptStartedAt{0};
 static DNSServer dns;static bool dnsActive=false,ntp=false;static std::atomic<bool> mdns{false},attempting{false};static uint32_t nextMdns=0;
 static std::atomic<bool> nameConflict{false};
 static std::atomic<bool> apReady{false};static std::atomic<unsigned> apFailures{0};static uint32_t apRetryAt=0;
@@ -45,7 +46,7 @@ static bool protectedStart(const Config&c){
  return esp_wifi_start()==ESP_OK;
 }
 static void apply(){Config c=copy();routerEnabled=c.valid&&c.ready&&!c.hotspot&&!c.ssid.isEmpty();associated=false;reason=0;ntp=false;
- WiFi.disconnect(false,false);if(mdns){MDNS.end();mdns=false;}dns.stop();dnsActive=false;
+ WiFi.disconnect(false,false);disconnectAt=0;attemptStartedAt=0;if(mdns){MDNS.end();mdns=false;}dns.stop();dnsActive=false;
  apReady=protectedStart(c);if(!apReady){routerEnabled=false;apFailures++;apRetryAt=millis()+5000;Serial.println("Protected AP start failed; radio remains stopped");return;}apFailures=0;
  if(!c.ready)dnsActive=dns.start(53,"*",WiFi.softAPIP());retry.reset(millis());attempting=false;nextMdns=0;
  Serial.printf("Camera setup: http://%s (router IP is shown after DHCP)\n",WiFi.softAPIP().toString().c_str());
@@ -60,14 +61,20 @@ void begin(){configMutex=xSemaphoreCreateMutex();if(!configMutex)return;config.a
  // A short display name cannot be globally unique. Report a nearby collision
  // without silently changing an already printed setup label.
  int nearby=WiFi.scanNetworks(false,true,false,120);for(int i=0;i<nearby;i++)if(WiFi.SSID(i)==config.apSsid)nameConflict=true;WiFi.scanDelete();
- WiFi.onEvent([](WiFiEvent_t event,WiFiEventInfo_t info){if(event==ARDUINO_EVENT_WIFI_STA_CONNECTED){associated=true;reason=0;}else if(event==ARDUINO_EVENT_WIFI_STA_DISCONNECTED){associated=false;reason=info.wifi_sta_disconnected.reason;}});
+ WiFi.onEvent([](WiFiEvent_t event,WiFiEventInfo_t info){if(event==ARDUINO_EVENT_WIFI_STA_CONNECTED){associated=true;reason=0;disconnectAt=0;}else if(event==ARDUINO_EVENT_WIFI_STA_DISCONNECTED){associated=false;reason=info.wifi_sta_disconnected.reason;disconnectAt=millis();}});
  apply();
 }
 void tick(){if(!configMutex)return;if(dnsActive)dns.processNextRequest();uint32_t now=millis(),when=applyAt.load();if(when){if(!NetworkPolicy::due(now,when))return;if(applyAt.compare_exchange_strong(when,0))apply();}
  if(!apReady){if(apFailures<3&&NetworkPolicy::due(now,apRetryAt))apply();return;}
  if(!routerEnabled)return;if(connected()){retry.connected(now);attempting=false;reason=0;if(!ntp){configTime(0,0,"pool.ntp.org","time.nist.gov");ntp=true;}if(!mdns&&NetworkPolicy::due(now,nextMdns)){nextMdns=now+15000;mdns=MDNS.begin("robetix");if(mdns)MDNS.addService("http","tcp",80);Serial.printf("Router assigned camera IP: http://%s\n",WiFi.localIP().toString().c_str());}return;}
- if(mdns){MDNS.end();mdns=false;}if(retry.timedOut(now)){WiFi.disconnect(false,false);retry.failed(now);attempting=false;return;}
- if(retry.ready(now)){Config c=copy();reason=0;associated=false;retry.started(now);attempting=true;WiFi.begin(c.ssid.c_str(),c.password.c_str());reconnects++;}
+ if(mdns){MDNS.end();mdns=false;}
+ // Ignore the stale disconnect raised while AP+STA is being reconfigured, but
+ // end a real failed association promptly. Previously auth/no-AP failures sat
+ // in "connecting" for 45 seconds even after the driver had rejected them.
+ uint32_t lost=disconnectAt.load(),started=attemptStartedAt.load();
+ if(retry.attempting&&lost&&int32_t(lost-started)>=500){WiFi.disconnect(false,false);retry.disconnected(now);attempting=false;return;}
+ if(retry.timedOut(now)){WiFi.disconnect(false,false);retry.failed(now);attempting=false;return;}
+ if(retry.ready(now)){Config c=copy();reason=0;associated=false;disconnectAt=0;retry.started(now);attemptStartedAt=now;attempting=true;WiFi.begin(c.ssid.c_str(),c.password.c_str());reconnects++;}
 }
 void status(JsonObject o){if(!configMutex){o["phase"]="unavailable";return;}Config c=copy();bool online=connected()&&!applyAt;uint16_t why=reason.load();
  o["hotspot_ready"]=apReady.load();o["hotspot_secure"]=apReady.load();o["hotspot_start_failures"]=apFailures.load();o["hotspot_bssid"]=WiFi.softAPmacAddress();
@@ -75,6 +82,7 @@ void status(JsonObject o){if(!configMutex){o["phase"]="unavailable";return;}Conf
  const char*phase=online?"connected":applyAt?"applying":!c.valid?"settings_error":!routerEnabled?"local_only":associated?"waiting_ip":why==WIFI_REASON_AUTH_FAIL||why==WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT||why==WIFI_REASON_HANDSHAKE_TIMEOUT?"check_password":why==WIFI_REASON_NO_AP_FOUND?"router_not_found":attempting?"connecting":"retry_wait";
  const char*message=online?"Connected to home Wi-Fi":!c.valid?"Saved Wi-Fi settings need attention. Run Wi-Fi Setup.":!routerEnabled?"Local viewing is ready. Remote viewing needs home Wi-Fi.":associated?"Connected to router. Waiting for an IP address.":!strcmp(phase,"check_password")?"Check the home Wi-Fi password and router security settings.":!strcmp(phase,"router_not_found")?"Home Wi-Fi was not found. Use a nearby 2.4 GHz network.":"Connecting to home Wi-Fi. The camera hotspot stays available.";
  o["gateway"]=WiFi.gatewayIP().toString();o["subnet"]=WiFi.subnetMask().toString();o["dns"]=WiFi.dnsIP().toString();o["channel"]=WiFi.channel();o["bssid"]=WiFi.BSSIDstr();o["rssi"]=online?WiFi.RSSI():0;
- o["phase"]=phase;o["message"]=message;o["reason"]=why;o["connected"]=online;o["ip"]=online?WiFi.localIP().toString():String("");o["ap_ip"]=WiFi.softAPIP().toString();o["ap_ssid"]=WiFi.softAPSSID();o["ssid"]=c.ssid;o["hotspot"]=c.hotspot;o["needs_network_setup"]=!c.ready;o["password_saved"]=c.password.length()>0;o["mdns"]=mdns.load();
+ uint32_t now=millis();uint32_t retryIn=retry.attempting?(NetworkPolicy::due(now,retry.deadline)?0:uint32_t(retry.deadline-now)):(retry.ready(now)?0:uint32_t(retry.next-now));
+ o["phase"]=phase;o["message"]=message;o["reason"]=why;o["last_disconnect_reason"]=why;o["attempting"]=retry.attempting;o["attempt_started_ms"]=attemptStartedAt.load();o["retry_in_ms"]=retryIn;o["connected"]=online;o["ip"]=online?WiFi.localIP().toString():String("");o["ap_ip"]=WiFi.softAPIP().toString();o["ap_ssid"]=WiFi.softAPSSID();o["ssid"]=c.ssid;o["hotspot"]=c.hotspot;o["needs_network_setup"]=!c.ready;o["password_saved"]=c.password.length()>0;o["mdns"]=mdns.load();
 }
 }
