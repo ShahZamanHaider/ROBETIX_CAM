@@ -3,6 +3,7 @@ import {appOrigin,getSession,readCookie,sessionName} from '../lib/session.mjs';
 import {uuid} from '../lib/recipients.mjs';
 import {liveConfigured,liveTicket} from '../lib/live.mjs';
 import {command,reads} from '../lib/commands.mjs';
+import { isSharedArrayBuffer } from 'node:util/types';
 export const config={api:{bodyParser:false}};
 async function execute(id,uid,request){
  const body=JSON.stringify(request),proof=liveTicket(id,'rpc',{subject:uid,request_hash:hash(body)});
