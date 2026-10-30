@@ -20,10 +20,10 @@ Pinned environment: PlatformIO Espressif32 **6.11.0**, Arduino-ESP32 **2.0.17**,
 
 Replace COMx with the actual serial port. If your adapter requires it, hold GPIO0 low during upload reset; release it and reset for normal use. Power off before reseating a camera ribbon or card. Use a stable regulated 5 V supply and short cable. Brownout protection remains enabled.
 
-## Everyday access — two addresses
+## Everyday access
 
-- Without Internet: join **ROBETIX-VISION-XX** using the private eight-digit factory Wi-Fi password, then open **http://192.168.4.1**. Home opens without another password or code.
-- With Internet: open **https://vision.robetix.com**. Your remembered private cloud session opens your cameras. Pair each camera once using Add Camera and its local Settings.
+- Open **https://vision.robetix.com** for your cameras and complete supported remote controls. Your remembered private cloud session opens your cameras. Pair each camera once using Add Camera and its local Settings.
+- Without Internet, the previously saved offline page offers **Open local camera**. Join **ROBETIX-VISION-XX** with its private factory Wi-Fi password. The fallback is **http://192.168.4.1**; no second local password or code is required. Cached pages alone cannot provide video.
 
 See [the customer guide](docs/CUSTOMER_GUIDE.md). Build commands and the remaining documents are engineering/service references, not customer onboarding instructions. Existing installed Wi-Fi credentials are preserved on upgrade.
 

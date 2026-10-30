@@ -1,5 +1,6 @@
 // A one-use same-origin download path streams card chunks into the browser's
 // download manager. Neither camera files nor relay credentials are cached.
+importScripts('/offline-cache.js');
 const downloads=new Map(),active=new Map();
 self.addEventListener('install',()=>self.skipWaiting());
 self.addEventListener('activate',event=>event.waitUntil(self.clients.claim()));
